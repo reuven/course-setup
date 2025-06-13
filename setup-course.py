@@ -5,32 +5,34 @@ import shutil
 import os
 from github import Github
 
-github_token = open('/Users/reuven/.github_token').read().strip()
+github_token = open("/Users/reuven/.github_token").read().strip()
 
 parser = argparse.ArgumentParser()
 
-parser.add_argument('-s', '--source', default='generic')
-parser.add_argument('-d', '--date', required=True)
-parser.add_argument('-c', '--client', required=True)
-parser.add_argument('-r', '--repo', required=True)
-parser.add_argument('-n', '--name', default='')
+parser.add_argument("-s", "--source", default="generic")
+parser.add_argument("-d", "--date", required=True)
+parser.add_argument("-c", "--client", required=True)
+parser.add_argument("-r", "--repo", required=True)
+parser.add_argument("-n", "--name", default="")
 
 args = parser.parse_args()
 
 if args.name:
-    suffix = f'-{args.name}'
+    suffix = f"-{args.name}"
 else:
-    suffix = ''
+    suffix = ""
 
-destination = f'{args.client}-{args.date}{suffix}'
+destination = f"{args.client}-{args.date}{suffix}"
 
 print(f'Copying from "{args.source}" to "{destination}"')
 
 shutil.copytree(args.source, destination)
 
 
-os.rename(f'{destination}/Course notebook.ipynb',
-          f'{destination}/{args.client} - {args.date}{suffix}.ipynb')
+os.rename(
+    f"{destination}/Course notebook.ipynb",
+    f"{destination}/{args.client} - {args.date}{suffix}.ipynb",
+)
 
 
 remote_info = f"""
@@ -51,13 +53,10 @@ remote_info = f"""
 
 
 # Write the remote info to the Git configuration file
-with open(f'{destination}/.git/config', 'w') as outfile:
+with open(f"{destination}/.git/config", "w") as outfile:
     outfile.write(remote_info)
 
 # Create the repo on GitHub
 g = Github(github_token)
 user = g.get_user()
-repo = user.create_repo(
-    name=args.repo,
-    private=False
-)
+repo = user.create_repo(name=args.repo, private=False)
