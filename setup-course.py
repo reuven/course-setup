@@ -4,12 +4,12 @@ import argparse
 import shutil
 import os
 from github import Github
+from pathlib import Path
 
 github_token = open("/Users/reuven/.github_token").read().strip()
 
 parser = argparse.ArgumentParser()
 
-parser.add_argument("-s", "--source", default="generic")
 parser.add_argument("-d", "--date", required=True)
 parser.add_argument("-c", "--client", required=True)
 parser.add_argument("-r", "--repo", required=True)
@@ -24,10 +24,18 @@ else:
 
 destination = f"{args.client}-{args.date}{suffix}"
 
-print(f'Copying from "{args.source}" to "{destination}"')
 
-shutil.copytree(args.source, destination)
+# hard-code to be the "generic" directory in the current folder
+template_dir = Path(__file__).parent / 'generic'
 
+print(f'Copying from "{template_dir}" to "{destination}"')
+
+shutil.copytree(template_dir, destination)
+
+os.rename(
+    f"{destination}/dot-git",
+    f"{destination}/.git",
+)
 
 os.rename(
     f"{destination}/Course notebook.ipynb",
@@ -50,6 +58,8 @@ remote_info = f"""
         remote = origin
         merge = refs/heads/main
 """
+
+
 
 
 # Write the remote info to the Git configuration file
