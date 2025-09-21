@@ -1,14 +1,12 @@
 #!/usr/bin/env python3
 
-from github import Github
+from setup_course_github import get_github
 import argparse
 import datetime
 import os
 import shutil
 import subprocess
 
-
-github_token = open("/Users/reuven/.github_token").read().strip()
 
 # Get the directory of the course we want to retire
 parser = argparse.ArgumentParser()
@@ -36,7 +34,7 @@ before, after = full_reponame.split("/")
 repo_name = "reuven/" + after.split(".")[0]
 
 # Connect to GitHub
-g = Github(github_token)
+g = get_github()
 
 # get the repo from the current directory!
 print(repo_name)

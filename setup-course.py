@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
 
+from setup_course_github import get_github_user
 import argparse
 import shutil
 import os
-from github import Github
 from pathlib import Path
 
-github_token = open("/Users/reuven/.github_token").read().strip()
 
 parser = argparse.ArgumentParser()
 
@@ -67,6 +66,5 @@ with open(f"{destination}/.git/config", "w") as outfile:
     outfile.write(remote_info)
 
 # Create the repo on GitHub
-g = Github(github_token)
-user = g.get_user()
+user = get_github_user()
 repo = user.create_repo(name=args.repo, private=False)
