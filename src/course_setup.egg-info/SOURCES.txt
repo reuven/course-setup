@@ -1,0 +1,8 @@
+README.md
+pyproject.toml
+src/course_setup.egg-info/PKG-INFO
+src/course_setup.egg-info/SOURCES.txt
+src/course_setup.egg-info/dependency_links.txt
+src/course_setup.egg-info/requires.txt
+src/course_setup.egg-info/top_level.txt
+src/setup_course_github/__init__.py

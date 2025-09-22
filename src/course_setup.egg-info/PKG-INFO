@@ -1,0 +1,7 @@
+Metadata-Version: 2.4
+Name: course-setup
+Version: 0.1.0
+Summary: Add your description here
+Requires-Python: >=3.13
+Description-Content-Type: text/markdown
+Requires-Dist: pygithub>=2.7.0
