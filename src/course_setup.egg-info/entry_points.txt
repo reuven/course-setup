@@ -1,0 +1,3 @@
+[console_scripts]
+retire-course = setup_course_github.retire_course:main
+setup-course = setup_course_github.setup_course:main
