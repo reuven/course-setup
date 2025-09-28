@@ -11,3 +11,11 @@
 [project.scripts]
     setup-course = "setup_course_github.setup_course:main"
     retire-course = "setup_course_github.retire_course:main"
+
+
+[build-system]
+  requires = ["setuptools", "wheel"]
+  build-backend = "setuptools.build_meta"
+
+[tool.setuptools.package-data]
+  setup_course_github = ["generic/**/*"]

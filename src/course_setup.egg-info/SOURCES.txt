@@ -3,6 +3,9 @@ pyproject.toml
 src/course_setup.egg-info/PKG-INFO
 src/course_setup.egg-info/SOURCES.txt
 src/course_setup.egg-info/dependency_links.txt
+src/course_setup.egg-info/entry_points.txt
 src/course_setup.egg-info/requires.txt
 src/course_setup.egg-info/top_level.txt
 src/setup_course_github/__init__.py
+src/setup_course_github/retire_course.py
+src/setup_course_github/setup_course.py
