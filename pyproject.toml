@@ -1,9 +1,13 @@
 [project]
-name = "course-setup"
-version = "0.1.0"
-description = "Add your description here"
-readme = "README.md"
-requires-python = ">=3.13"
-dependencies = [
-    "pygithub>=2.7.0",
-]
+    name = "course-setup"
+    version = "0.1.0"
+    description = "Add your description here"
+    readme = "README.md"
+    requires-python = ">=3.13"
+    dependencies = [
+        "pygithub>=2.7.0",
+    ]
+
+[project.scripts]
+    setup-course = "setup_course_github.setup_course:main"
+    retire-course = "setup_course_github.retire_course:main"
