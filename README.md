@@ -4,14 +4,27 @@ CLI tools for setting up and retiring GitHub-backed course repositories.
 
 ## Installation
 
+Because `course-setup` is a standalone CLI tool (not a library you import into
+projects), the recommended way to install it is as a
+[uv tool](https://docs.astral.sh/uv/concepts/tools/):
+
 ```bash
-pip install course-setup
+uv tool install course-setup
 ```
 
-Or with [uv](https://docs.astral.sh/uv/):
+This installs it in an isolated environment and makes `setup-course`,
+`retire-course`, and `setup-course-config` available globally on your PATH.
+
+To upgrade later:
 
 ```bash
-uv pip install course-setup
+uv tool upgrade course-setup
+```
+
+Alternatively, you can install with pip:
+
+```bash
+pip install course-setup
 ```
 
 ## Configuration

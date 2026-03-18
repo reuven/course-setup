@@ -36,16 +36,31 @@ repositories. It provides three commands:
 
 ## Installation
 
-Install from PyPI (once published):
+Because `course-setup` is a standalone CLI tool (not a library you import into
+projects), the recommended way to install it is as a
+[uv tool](https://docs.astral.sh/uv/concepts/tools/):
+
+```
+uv tool install course-setup
+```
+
+This installs it in an isolated environment and makes the three commands
+available globally on your PATH:
+
+- `setup-course`
+- `retire-course`
+- `setup-course-config`
+
+To upgrade later:
+
+```
+uv tool upgrade course-setup
+```
+
+Alternatively, you can install with pip:
 
 ```
 pip install course-setup
-```
-
-Or with uv:
-
-```
-uv pip install course-setup
 ```
 
 For a development install from a local clone:
@@ -55,12 +70,6 @@ git clone https://github.com/reuven/course-setup.git
 cd course-setup
 uv sync
 ```
-
-After installation, three commands are available on your PATH:
-
-- `setup-course`
-- `retire-course`
-- `setup-course-config`
 
 ---
 
@@ -271,6 +280,7 @@ the parent directories if they don't exist.
 
 ```
 # One-time setup
+uv tool install course-setup
 setup-course-config
 # Edit ~/.config/course-setup/config.toml with your token, archive path, etc.
 
