@@ -42,6 +42,13 @@ def test_config_contains_defaults_section(tmp_path: Path) -> None:
     assert "notebook_type" in content
 
 
+def test_config_contains_readme_source(tmp_path: Path) -> None:
+    config_file = tmp_path / "config.toml"
+    create_config(config_file)
+    content = config_file.read_text()
+    assert "readme_source" in content
+
+
 def test_config_is_valid_toml(tmp_path: Path) -> None:
     import tomllib
 
