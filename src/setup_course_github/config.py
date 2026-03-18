@@ -17,6 +17,7 @@ class CourseConfig:
     github_token: str
     archive_path: Path
     default_notebook_type: str
+    readme_source: str | None = None
 
 
 def load_config(path: Path = CONFIG_PATH) -> CourseConfig:
@@ -55,8 +56,12 @@ def load_config(path: Path = CONFIG_PATH) -> CourseConfig:
             f"Invalid notebook_type '{notebook_type}'. Must be one of: {valid}"
         )
 
+    # README source: optional file path or URL
+    readme_source: str | None = paths_section.get("readme_source")
+
     return CourseConfig(
         github_token=github_token,
         archive_path=archive_path,
         default_notebook_type=notebook_type,
+        readme_source=readme_source,
     )
