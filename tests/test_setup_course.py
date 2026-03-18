@@ -6,11 +6,15 @@ from unittest.mock import MagicMock, patch
 from setup_course_github.setup_course import _get_template_dir, main
 
 
-def make_mock_config(default_notebook_type: str = "jupyter") -> MagicMock:
+def make_mock_config(
+    default_notebook_type: str = "jupyter",
+    readme_source: str | None = None,
+) -> MagicMock:
     """Return a mock CourseConfig with sensible defaults."""
     config = MagicMock()
     config.github_token = "ghp_testtoken"
     config.default_notebook_type = default_notebook_type
+    config.readme_source = readme_source
     return config
 
 
@@ -839,3 +843,145 @@ def test_get_template_dir_returns_generic_path() -> None:
     result = _get_template_dir()
     assert result.name == "generic"
     assert result.parent.name == "setup_course_github"
+
+
+# ---------------------------------------------------------------------------
+# README source tests
+# ---------------------------------------------------------------------------
+
+
+def test_bundled_readme_used_when_no_readme_source(tmp_path: Path) -> None:
+    """When readme_source is None, the bundled template README is used."""
+    template = setup_template(tmp_path)
+    mock_config = make_mock_config(readme_source=None)
+    mock_user = make_mock_user()
+
+    with (
+        patch("setup_course_github.setup_course.load_config", return_value=mock_config),
+        patch("setup_course_github.setup_course.Github") as mock_github_cls,
+        patch(
+            "setup_course_github.setup_course._get_template_dir", return_value=template
+        ),
+    ):
+        mock_github_cls.return_value.get_user.return_value = mock_user
+
+        import os
+        import sys
+
+        sys.argv = [
+            "setup-course",
+            "-d",
+            "2026-03-01",
+            "-c",
+            "corp",
+            "-r",
+            "corp-repo",
+            "--notebook-type",
+            "jupyter",
+        ]
+        os.chdir(tmp_path)
+        try:
+            main()
+        finally:
+            os.chdir(Path(__file__).parent.parent)
+
+    dest = tmp_path / "corp-2026-03-01"
+    readme = dest / "README.md"
+    assert readme.exists()
+    assert readme.read_text() == "# Course\n"
+
+
+def test_readme_from_local_file(tmp_path: Path) -> None:
+    """When readme_source is a local file path, that file is used as README."""
+    template = setup_template(tmp_path)
+    custom_readme = tmp_path / "my-custom-readme.md"
+    custom_readme.write_text("# My Custom README\nHello world!\n")
+
+    mock_config = make_mock_config(readme_source=str(custom_readme))
+    mock_user = make_mock_user()
+
+    with (
+        patch("setup_course_github.setup_course.load_config", return_value=mock_config),
+        patch("setup_course_github.setup_course.Github") as mock_github_cls,
+        patch(
+            "setup_course_github.setup_course._get_template_dir", return_value=template
+        ),
+    ):
+        mock_github_cls.return_value.get_user.return_value = mock_user
+
+        import os
+        import sys
+
+        sys.argv = [
+            "setup-course",
+            "-d",
+            "2026-03-01",
+            "-c",
+            "corp",
+            "-r",
+            "corp-repo",
+            "--notebook-type",
+            "jupyter",
+        ]
+        os.chdir(tmp_path)
+        try:
+            main()
+        finally:
+            os.chdir(Path(__file__).parent.parent)
+
+    dest = tmp_path / "corp-2026-03-01"
+    readme = dest / "README.md"
+    assert readme.exists()
+    assert readme.read_text() == "# My Custom README\nHello world!\n"
+
+
+def test_readme_from_url(tmp_path: Path) -> None:
+    """When readme_source is a URL, the content is fetched and used as README."""
+    template = setup_template(tmp_path)
+    url = "https://example.com/my-readme.md"
+    fetched_content = "# README from URL\nFetched content.\n"
+
+    mock_config = make_mock_config(readme_source=url)
+    mock_user = make_mock_user()
+
+    with (
+        patch("setup_course_github.setup_course.load_config", return_value=mock_config),
+        patch("setup_course_github.setup_course.Github") as mock_github_cls,
+        patch(
+            "setup_course_github.setup_course._get_template_dir", return_value=template
+        ),
+        patch(
+            "setup_course_github.setup_course.urllib.request.urlopen"
+        ) as mock_urlopen,
+    ):
+        mock_github_cls.return_value.get_user.return_value = mock_user
+        mock_response = MagicMock()
+        mock_response.read.return_value = fetched_content.encode("utf-8")
+        mock_response.__enter__ = MagicMock(return_value=mock_response)
+        mock_response.__exit__ = MagicMock(return_value=False)
+        mock_urlopen.return_value = mock_response
+
+        import os
+        import sys
+
+        sys.argv = [
+            "setup-course",
+            "-d",
+            "2026-03-01",
+            "-c",
+            "corp",
+            "-r",
+            "corp-repo",
+            "--notebook-type",
+            "jupyter",
+        ]
+        os.chdir(tmp_path)
+        try:
+            main()
+        finally:
+            os.chdir(Path(__file__).parent.parent)
+
+    dest = tmp_path / "corp-2026-03-01"
+    readme = dest / "README.md"
+    assert readme.exists()
+    assert readme.read_text() == fetched_content
