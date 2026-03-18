@@ -1,14 +1,15 @@
 import os
-import pytest
 from pathlib import Path
 from unittest.mock import patch
+
+import pytest
+
 from setup_course_github.config import (
+    CONFIG_PATH,
     ConfigError,
     CourseConfig,
     load_config,
-    CONFIG_PATH,
 )
-
 
 MINIMAL_TOML = """
 [github]
@@ -96,9 +97,7 @@ def test_load_config_file_not_found(tmp_path: Path) -> None:
 
 def test_invalid_notebook_type(tmp_path: Path) -> None:
     config_file = tmp_path / "config.toml"
-    config_file.write_text(
-        MINIMAL_TOML + '\n[defaults]\nnotebook_type = "invalid"\n'
-    )
+    config_file.write_text(MINIMAL_TOML + '\n[defaults]\nnotebook_type = "invalid"\n')
     with pytest.raises(ConfigError, match="notebook_type"):
         load_config(config_file)
 

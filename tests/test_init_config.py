@@ -1,7 +1,9 @@
-import pytest
 from pathlib import Path
 from unittest.mock import patch
-from setup_course_github.init_config import create_config, ConfigExistsError
+
+import pytest
+
+from setup_course_github.init_config import ConfigExistsError, create_config
 
 
 def test_creates_config_file(tmp_path: Path) -> None:
@@ -71,6 +73,7 @@ def test_main_creates_config(tmp_path: Path) -> None:
     config_file = tmp_path / "config.toml"
     with patch("setup_course_github.init_config.CONFIG_PATH", config_file):
         from setup_course_github.init_config import main
+
         main([])
     assert config_file.exists()
 
@@ -80,6 +83,7 @@ def test_main_force_flag(tmp_path: Path) -> None:
     config_file.write_text("[github]\ntoken = 'old'\n")
     with patch("setup_course_github.init_config.CONFIG_PATH", config_file):
         from setup_course_github.init_config import main
+
         main(["--force"])
     content = config_file.read_text()
     assert "[paths]" in content
@@ -90,6 +94,7 @@ def test_main_exits_if_exists_no_force(tmp_path: Path) -> None:
     config_file.write_text("[github]\ntoken = 'existing'\n")
     with patch("setup_course_github.init_config.CONFIG_PATH", config_file):
         from setup_course_github.init_config import main
+
         with pytest.raises(SystemExit) as exc_info:
             main([])
     assert exc_info.value.code != 0
