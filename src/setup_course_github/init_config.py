@@ -19,6 +19,13 @@ token = "ghp_YOUR_TOKEN_HERE"
 # Example: "/Users/yourname/Courses/Archive"
 archive = "/path/to/your/archive"
 
+# Optional: path or URL to a custom README.md for new courses.
+# If not set, the bundled default README is used.
+# Examples:
+#   readme_source = "/Users/yourname/templates/README.md"
+#   readme_source = "https://example.com/my-readme.md"
+# readme_source = ""
+
 [defaults]
 # Default notebook type when running setup-course.
 # Options: "jupyter" or "marimo"
