@@ -30,6 +30,24 @@ archive = "/tmp/archive"
 notebook_type = "marimo"
 """
 
+README_SOURCE_FILE_TOML = """
+[github]
+token = "ghp_testtoken"
+
+[paths]
+archive = "/tmp/archive"
+readme_source = "/path/to/my/README.md"
+"""
+
+README_SOURCE_URL_TOML = """
+[github]
+token = "ghp_testtoken"
+
+[paths]
+archive = "/tmp/archive"
+readme_source = "https://example.com/README.md"
+"""
+
 MISSING_TOKEN_TOML = """
 [paths]
 archive = "/tmp/archive"
@@ -41,7 +59,7 @@ token = "ghp_testtoken"
 """
 
 
-def test_config_path_is_xdg():
+def test_config_path_is_xdg() -> None:
     assert CONFIG_PATH == Path.home() / ".config" / "course-setup" / "config.toml"
 
 
@@ -111,3 +129,28 @@ def test_course_config_dataclass() -> None:
     assert config.github_token == "tok"
     assert config.archive_path == Path("/tmp")
     assert config.default_notebook_type == "jupyter"
+    assert config.readme_source is None
+
+
+def test_readme_source_defaults_to_none(tmp_path: Path) -> None:
+    """When readme_source is not in config, it defaults to None."""
+    config_file = tmp_path / "config.toml"
+    config_file.write_text(MINIMAL_TOML)
+    config = load_config(config_file)
+    assert config.readme_source is None
+
+
+def test_readme_source_file_path(tmp_path: Path) -> None:
+    """readme_source can be a local file path."""
+    config_file = tmp_path / "config.toml"
+    config_file.write_text(README_SOURCE_FILE_TOML)
+    config = load_config(config_file)
+    assert config.readme_source == "/path/to/my/README.md"
+
+
+def test_readme_source_url(tmp_path: Path) -> None:
+    """readme_source can be a URL."""
+    config_file = tmp_path / "config.toml"
+    config_file.write_text(README_SOURCE_URL_TOML)
+    config = load_config(config_file)
+    assert config.readme_source == "https://example.com/README.md"
