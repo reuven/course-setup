@@ -3,6 +3,7 @@
 import argparse
 import os
 import shutil
+import urllib.request
 from pathlib import Path
 from typing import cast
 
@@ -107,6 +108,16 @@ def main() -> None:
         f"{destination}/dot-git",
         f"{destination}/.git",
     )
+
+    # Replace README if a custom source is configured
+    if config.readme_source is not None:
+        readme_path = Path(f"{destination}/README.md")
+        source = config.readme_source
+        if source.startswith(("http://", "https://")):
+            with urllib.request.urlopen(source) as response:
+                readme_path.write_text(response.read().decode("utf-8"))
+        else:
+            shutil.copy2(source, str(readme_path))
 
     # Handle notebook file
     ipynb_path = Path(f"{destination}/Course notebook.ipynb")
