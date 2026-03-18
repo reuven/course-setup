@@ -19,3 +19,34 @@
 
 [tool.setuptools.package-data]
   setup_course_github = ["generic/**/*"]
+
+[dependency-groups]
+dev = [
+    "black>=26.3.1",
+    "mypy>=1.19.1",
+    "pytest>=9.0.2",
+    "pytest-cov>=7.0.0",
+    "ruff>=0.15.6",
+]
+
+[tool.black]
+  line-length = 88
+  target-version = ["py313"]
+
+[tool.ruff]
+  line-length = 88
+  target-version = "py313"
+
+[tool.ruff.lint]
+  select = ["E", "F", "I"]
+
+[tool.mypy]
+  strict = true
+  python_version = "3.13"
+
+[tool.pytest.ini_options]
+  addopts = "--cov=setup_course_github --cov-report=term-missing --cov-fail-under=100"
+  testpaths = ["tests"]
+
+[tool.coverage.run]
+  source = ["src"]
