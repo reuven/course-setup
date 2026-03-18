@@ -1,0 +1,25 @@
+# Build artifacts
+dist/
+*.egg-info/
+src/*.egg-info/
+
+# Virtual environments
+.venv/
+
+# Caches
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+__pycache__/
+
+# Coverage
+.coverage
+htmlcov/
+
+# Claude Code
+.claude/
+
+# IDE
+.idea/
+.vscode/
+*.swp
