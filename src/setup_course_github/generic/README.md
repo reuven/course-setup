@@ -4,16 +4,25 @@ This repo contains the notebook + files from my training class.  It'll remain op
 
 Enjoy!
 
-If you liked this training, you might also like:
+Here's some more info about what I do:
 
-- My YouTube channel: https://YouTube.com/reuvenlerner
+## Newsletters
+
 - Better developers, new, free articles about Python every week: https://BetterDevelopersWeekly.com/
 - "Bamboo Weekly," where I analyze data related to current events using Pandas: https://www.BambooWeekly.com/
-- My Bluesky feed: https://bsky.app/profile/lernerpython.com
-- My first book, "Python Workout": https://PythonWorkout.com/
-- My second book, "Pandas Workout": https://PandasWorkout.com/
-- LinkedIn, where I also post: https://linkedin.com/in/reuven
 
-Want to get access to all of my courses? Check out my classes at https://LernerPython.com/
+## Social media
+
+- YouTube: https://YouTube.com/reuvenlerner
+- LinkedIn: https://linkedin.com/in/reuven
+- Bluesky: https://bsky.app/profile/lernerpython.com
+
+
+## Books
+- Python Workout, 200 Python exercises: https://PythonWorkout.com/
+- Pandas Workout, 200 Pandas exercises: https://PandasWorkout.com/
+- My new book, currently in progress, "AI Assisted Python for nonprogrammers": https://learning.oreilly.com/library/view/ai-assisted-python-for/9798341661622/
+
+You can also check out my learning platform at https://LernerPython.com/
 
 And of course, you can always e-mail me at reuven@LernerPython.com .

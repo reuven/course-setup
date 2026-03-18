@@ -29,3 +29,4 @@ src/setup_course_github/generic/dot-git/hooks/push-to-checkout.sample
 src/setup_course_github/generic/dot-git/hooks/sendemail-validate.sample
 src/setup_course_github/generic/dot-git/hooks/update.sample
 src/setup_course_github/generic/dot-git/info/exclude
+tests/test_config.py

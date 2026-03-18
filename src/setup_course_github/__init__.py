@@ -1,8 +1,15 @@
 from github import Github
+from github.AuthenticatedUser import AuthenticatedUser
 
-def get_github():
-    github_token = open("/Users/reuven/.github_token").read().strip()
-    return Github(github_token)
+from setup_course_github.config import load_config
 
-def get_github_user():
-    return get_github().get_user()
+
+def get_github() -> Github:
+    config = load_config()
+    return Github(config.github_token)
+
+
+def get_github_user() -> AuthenticatedUser:
+    user = get_github().get_user()
+    assert isinstance(user, AuthenticatedUser)
+    return user

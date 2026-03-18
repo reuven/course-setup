@@ -1,16 +1,33 @@
 [project]
     name = "course-setup"
-    version = "0.5.0"
-    description = "Add your description here"
+    version = "1.0.0"
+    description = "CLI tools for setting up and retiring GitHub-backed course repositories"
     readme = "README.md"
     requires-python = ">=3.13"
+    license = "MIT"
+    authors = [
+        {name = "Reuven Lerner", email = "reuven@lerner.co.il"},
+    ]
+    classifiers = [
+        "Development Status :: 5 - Production/Stable",
+        "Environment :: Console",
+        "Intended Audience :: Education",
+        "Programming Language :: Python :: 3",
+        "Programming Language :: Python :: 3.13",
+        "Topic :: Education",
+    ]
     dependencies = [
         "pygithub>=2.7.0",
     ]
 
+[project.urls]
+    Homepage = "https://github.com/reuven/course-setup"
+    Repository = "https://github.com/reuven/course-setup"
+
 [project.scripts]
     setup-course = "setup_course_github.setup_course:main"
     retire-course = "setup_course_github.retire_course:main"
+    setup-course-config = "setup_course_github.init_config:main"
 
 
 [build-system]
@@ -19,3 +36,40 @@
 
 [tool.setuptools.package-data]
   setup_course_github = ["generic/**/*"]
+
+[dependency-groups]
+dev = [
+    "black>=26.3.1",
+    "mypy>=1.19.1",
+    "pytest>=9.0.2",
+    "pytest-cov>=7.0.0",
+    "ruff>=0.15.6",
+]
+
+[tool.black]
+  line-length = 88
+  target-version = ["py313"]
+
+[tool.ruff]
+  line-length = 88
+  target-version = "py313"
+
+[tool.ruff.lint]
+  select = ["E", "F", "I"]
+
+[tool.mypy]
+  strict = true
+  python_version = "3.13"
+
+[tool.pytest.ini_options]
+  addopts = "--cov=setup_course_github --cov-report=term-missing --cov-fail-under=100"
+  testpaths = ["tests"]
+
+[tool.coverage.run]
+  source = ["src"]
+
+[tool.coverage.report]
+  exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.:",
+  ]
