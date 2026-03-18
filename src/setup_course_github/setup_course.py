@@ -3,6 +3,7 @@
 import argparse
 import os
 import shutil
+import subprocess
 import urllib.request
 from pathlib import Path
 from typing import cast
@@ -104,10 +105,7 @@ def main() -> None:
 
     shutil.copytree(str(template_dir), destination)
 
-    os.rename(
-        f"{destination}/dot-git",
-        f"{destination}/.git",
-    )
+    subprocess.run(["git", "init"], cwd=destination, check=True)
 
     # Replace README if a custom source is configured
     if config.readme_source is not None:

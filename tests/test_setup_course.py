@@ -1,9 +1,17 @@
 """Tests for the refactored setup_course module."""
 
 from pathlib import Path
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 from setup_course_github.setup_course import _get_template_dir, main
+
+
+def _fake_git_init(*args: Any, **kwargs: Any) -> None:
+    """Simulate git init by creating the .git directory."""
+    cwd = kwargs.get("cwd")
+    if cwd is not None:
+        (Path(cwd) / ".git").mkdir(exist_ok=True)
 
 
 def make_mock_config(
@@ -30,9 +38,6 @@ def setup_template(tmp_path: Path) -> Path:
     """Create a minimal generic template directory in tmp_path."""
     template = tmp_path / "generic"
     template.mkdir(parents=True, exist_ok=True)
-    dot_git = template / "dot-git"
-    dot_git.mkdir()
-    (dot_git / "config").write_text("# placeholder git config\n")
     (template / "Course notebook.ipynb").write_text('{"cells": []}\n')
     (template / "README.md").write_text("# Course\n")
     return template
@@ -101,6 +106,10 @@ def test_destination_dir_without_name(tmp_path: Path) -> None:
         patch(
             "setup_course_github.setup_course._get_template_dir", return_value=template
         ),
+        patch(
+            "setup_course_github.setup_course.subprocess.run",
+            side_effect=_fake_git_init,
+        ),
     ):
         mock_github_cls.return_value.get_user.return_value = mock_user
 
@@ -143,6 +152,10 @@ def test_destination_dir_with_name(tmp_path: Path) -> None:
         patch(
             "setup_course_github.setup_course._get_template_dir", return_value=template
         ),
+        patch(
+            "setup_course_github.setup_course.subprocess.run",
+            side_effect=_fake_git_init,
+        ),
     ):
         mock_github_cls.return_value.get_user.return_value = mock_user
 
@@ -177,8 +190,8 @@ def test_destination_dir_with_name(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_template_copied_and_dot_git_renamed(tmp_path: Path) -> None:
-    """Template is copied and dot-git renamed to .git."""
+def test_template_copied_and_git_init_called(tmp_path: Path) -> None:
+    """Template is copied and git init is run instead of renaming dot-git."""
     template = setup_template(tmp_path)
     mock_config = make_mock_config()
     mock_user = make_mock_user()
@@ -189,6 +202,10 @@ def test_template_copied_and_dot_git_renamed(tmp_path: Path) -> None:
         patch(
             "setup_course_github.setup_course._get_template_dir", return_value=template
         ),
+        patch(
+            "setup_course_github.setup_course.subprocess.run",
+            side_effect=_fake_git_init,
+        ) as mock_run,
     ):
         mock_github_cls.return_value.get_user.return_value = mock_user
 
@@ -213,9 +230,8 @@ def test_template_copied_and_dot_git_renamed(tmp_path: Path) -> None:
             os.chdir(Path(__file__).parent.parent)
 
     dest = tmp_path / "corp-2026-03-01"
-    assert (dest / ".git").exists()
-    assert (dest / ".git").is_dir()
     assert not (dest / "dot-git").exists()
+    mock_run.assert_called_once_with(["git", "init"], cwd="corp-2026-03-01", check=True)
 
 
 # ---------------------------------------------------------------------------
@@ -234,6 +250,10 @@ def test_jupyter_notebook_created(tmp_path: Path) -> None:
         patch("setup_course_github.setup_course.Github") as mock_github_cls,
         patch(
             "setup_course_github.setup_course._get_template_dir", return_value=template
+        ),
+        patch(
+            "setup_course_github.setup_course.subprocess.run",
+            side_effect=_fake_git_init,
         ),
     ):
         mock_github_cls.return_value.get_user.return_value = mock_user
@@ -275,6 +295,10 @@ def test_jupyter_notebook_with_suffix(tmp_path: Path) -> None:
         patch("setup_course_github.setup_course.Github") as mock_github_cls,
         patch(
             "setup_course_github.setup_course._get_template_dir", return_value=template
+        ),
+        patch(
+            "setup_course_github.setup_course.subprocess.run",
+            side_effect=_fake_git_init,
         ),
     ):
         mock_github_cls.return_value.get_user.return_value = mock_user
@@ -318,6 +342,10 @@ def test_marimo_notebook_created(tmp_path: Path) -> None:
         patch(
             "setup_course_github.setup_course._get_template_dir", return_value=template
         ),
+        patch(
+            "setup_course_github.setup_course.subprocess.run",
+            side_effect=_fake_git_init,
+        ),
     ):
         mock_github_cls.return_value.get_user.return_value = mock_user
 
@@ -359,6 +387,10 @@ def test_marimo_notebook_content(tmp_path: Path) -> None:
         patch("setup_course_github.setup_course.Github") as mock_github_cls,
         patch(
             "setup_course_github.setup_course._get_template_dir", return_value=template
+        ),
+        patch(
+            "setup_course_github.setup_course.subprocess.run",
+            side_effect=_fake_git_init,
         ),
     ):
         mock_github_cls.return_value.get_user.return_value = mock_user
@@ -410,6 +442,10 @@ def test_pyproject_toml_created_jupyter(tmp_path: Path) -> None:
         patch(
             "setup_course_github.setup_course._get_template_dir", return_value=template
         ),
+        patch(
+            "setup_course_github.setup_course.subprocess.run",
+            side_effect=_fake_git_init,
+        ),
     ):
         mock_github_cls.return_value.get_user.return_value = mock_user
 
@@ -455,6 +491,10 @@ def test_pyproject_toml_created_marimo(tmp_path: Path) -> None:
         patch("setup_course_github.setup_course.Github") as mock_github_cls,
         patch(
             "setup_course_github.setup_course._get_template_dir", return_value=template
+        ),
+        patch(
+            "setup_course_github.setup_course.subprocess.run",
+            side_effect=_fake_git_init,
         ),
     ):
         mock_github_cls.return_value.get_user.return_value = mock_user
@@ -507,6 +547,10 @@ def test_pyproject_toml_always_has_gitautopush(tmp_path: Path) -> None:
                 "setup_course_github.setup_course._get_template_dir",
                 return_value=local_template,
             ),
+            patch(
+                "setup_course_github.setup_course.subprocess.run",
+                side_effect=_fake_git_init,
+            ),
         ):
             mock_github_cls.return_value.get_user.return_value = mock_user
 
@@ -555,6 +599,10 @@ def test_git_config_uses_api_username(tmp_path: Path) -> None:
         patch(
             "setup_course_github.setup_course._get_template_dir", return_value=template
         ),
+        patch(
+            "setup_course_github.setup_course.subprocess.run",
+            side_effect=_fake_git_init,
+        ),
     ):
         mock_github_cls.return_value.get_user.return_value = mock_user
 
@@ -596,6 +644,10 @@ def test_git_config_not_hardcoded_reuven(tmp_path: Path) -> None:
         patch("setup_course_github.setup_course.Github") as mock_github_cls,
         patch(
             "setup_course_github.setup_course._get_template_dir", return_value=template
+        ),
+        patch(
+            "setup_course_github.setup_course.subprocess.run",
+            side_effect=_fake_git_init,
         ),
     ):
         mock_github_cls.return_value.get_user.return_value = mock_user
@@ -642,6 +694,10 @@ def test_github_repo_created_as_public(tmp_path: Path) -> None:
         patch(
             "setup_course_github.setup_course._get_template_dir", return_value=template
         ),
+        patch(
+            "setup_course_github.setup_course.subprocess.run",
+            side_effect=_fake_git_init,
+        ),
     ):
         mock_github_cls.return_value.get_user.return_value = mock_user
 
@@ -680,6 +736,10 @@ def test_github_authenticated_with_token(tmp_path: Path) -> None:
         patch("setup_course_github.setup_course.Github") as mock_github_cls,
         patch(
             "setup_course_github.setup_course._get_template_dir", return_value=template
+        ),
+        patch(
+            "setup_course_github.setup_course.subprocess.run",
+            side_effect=_fake_git_init,
         ),
     ):
         mock_github_cls.return_value.get_user.return_value = mock_user
@@ -725,6 +785,10 @@ def test_notebook_type_flag_overrides_config(tmp_path: Path) -> None:
         patch(
             "setup_course_github.setup_course._get_template_dir", return_value=template
         ),
+        patch(
+            "setup_course_github.setup_course.subprocess.run",
+            side_effect=_fake_git_init,
+        ),
     ):
         mock_github_cls.return_value.get_user.return_value = mock_user
 
@@ -767,6 +831,10 @@ def test_default_notebook_type_from_config(tmp_path: Path) -> None:
         patch(
             "setup_course_github.setup_course._get_template_dir", return_value=template
         ),
+        patch(
+            "setup_course_github.setup_course.subprocess.run",
+            side_effect=_fake_git_init,
+        ),
     ):
         mock_github_cls.return_value.get_user.return_value = mock_user
 
@@ -805,6 +873,10 @@ def test_default_notebook_type_jupyter_from_config(tmp_path: Path) -> None:
         patch("setup_course_github.setup_course.Github") as mock_github_cls,
         patch(
             "setup_course_github.setup_course._get_template_dir", return_value=template
+        ),
+        patch(
+            "setup_course_github.setup_course.subprocess.run",
+            side_effect=_fake_git_init,
         ),
     ):
         mock_github_cls.return_value.get_user.return_value = mock_user
@@ -862,6 +934,10 @@ def test_bundled_readme_used_when_no_readme_source(tmp_path: Path) -> None:
         patch(
             "setup_course_github.setup_course._get_template_dir", return_value=template
         ),
+        patch(
+            "setup_course_github.setup_course.subprocess.run",
+            side_effect=_fake_git_init,
+        ),
     ):
         mock_github_cls.return_value.get_user.return_value = mock_user
 
@@ -905,6 +981,10 @@ def test_readme_from_local_file(tmp_path: Path) -> None:
         patch("setup_course_github.setup_course.Github") as mock_github_cls,
         patch(
             "setup_course_github.setup_course._get_template_dir", return_value=template
+        ),
+        patch(
+            "setup_course_github.setup_course.subprocess.run",
+            side_effect=_fake_git_init,
         ),
     ):
         mock_github_cls.return_value.get_user.return_value = mock_user
@@ -953,6 +1033,10 @@ def test_readme_from_url(tmp_path: Path) -> None:
         patch(
             "setup_course_github.setup_course.urllib.request.urlopen"
         ) as mock_urlopen,
+        patch(
+            "setup_course_github.setup_course.subprocess.run",
+            side_effect=_fake_git_init,
+        ),
     ):
         mock_github_cls.return_value.get_user.return_value = mock_user
         mock_response = MagicMock()
