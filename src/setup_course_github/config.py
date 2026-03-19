@@ -19,6 +19,7 @@ class CourseConfig:
     default_notebook_type: str
     readme_source: str | None = None
     default_verbose: bool = False
+    default_extras_group: str | None = None
     custom_extras: dict[str, list[str]] = field(default_factory=dict)
 
 
@@ -66,6 +67,17 @@ def load_config(path: Path = CONFIG_PATH) -> CourseConfig:
         )
     default_verbose: bool = raw_verbose
 
+    # Default extras group: optional, defaults to None
+    raw_extras_group: object = defaults_section.get("extras_group")
+    default_extras_group: str | None = None
+    if raw_extras_group is not None:
+        if not isinstance(raw_extras_group, str):
+            raise ConfigError(
+                f"Invalid extras_group value '{raw_extras_group}'. "
+                "Must be a string (group name)"
+            )
+        default_extras_group = raw_extras_group
+
     # README source: optional file path or URL
     readme_source: str | None = paths_section.get("readme_source")
 
@@ -83,5 +95,6 @@ def load_config(path: Path = CONFIG_PATH) -> CourseConfig:
         default_notebook_type=notebook_type,
         readme_source=readme_source,
         default_verbose=default_verbose,
+        default_extras_group=default_extras_group,
         custom_extras=custom_extras,
     )
