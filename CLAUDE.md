@@ -23,7 +23,7 @@ versions means we won't lose anything.)
     - If you have more than one file mentioned in a commit, it's probably too much.
     - Every new feature should be implemented on a separate branch that is merged into main when it's done
 - Don't assume that code works. Make sure to run it, and check its output
-- Use black to format the code and ruff to check it. Do this on a very regular basis, not just at the end. Certainly do it before each Git commit.
+- Use ruff for both formatting (`ruff format`) and linting (`ruff check`). Do this on a very regular basis, not just at the end. Certainly do it before each Git commit.
 
 - Use type hints everywhere. Run `mypy` with `strict` option all of the time, certainly before committing.
 
