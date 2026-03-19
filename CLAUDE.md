@@ -28,6 +28,9 @@
     - Have each agent use a different Git worktree when working on the repo in parallel
     - When an agent has finished its job, get rid of the unneeded worktree
 
-**STRICT RULE - NO EXCEPTIONS**: Never chain commands with `&&`.
-Always issue separate, sequential commands. This applies to ALL
-cases, including `cd && git`, `cd && make`, etc.
+- Documentation:
+    - Make sure that there is a README.md, which will both be seen on the GitHub repo and also in PyPI.
+    - Write a manual, in Markdown format, of how to use the software. This should be more detailed than the README.
+    - Whenever you update the code, update both the README and the manual to reflect the most recent usage.
+
+**STRICT RULE - NO EXCEPTIONS**: Never chain commands with `&&`. Always issue separate, sequential commands, separately (not as multiple lines in one command). This applies to ALL cases, including `cd && git`, `cd && make`, etc.
