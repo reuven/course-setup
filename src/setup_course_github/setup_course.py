@@ -13,6 +13,15 @@ from github.AuthenticatedUser import AuthenticatedUser
 
 from setup_course_github.config import load_config
 
+EXTRAS_GROUPS: dict[str, list[str]] = {
+    "python": ["ipython"],
+    "data": ["numpy", "pandas", "xlrd", "openpyxl", "plotly"],
+    "viz": ["matplotlib", "seaborn"],
+    "geo": ["geopandas", "folium", "shapely"],
+    "db": ["duckdb", "sqlalchemy"],
+    "ml": ["scikit-learn"],
+}
+
 MARIMO_TEMPLATE = """\
 import marimo
 
@@ -40,17 +49,24 @@ def _get_template_dir() -> Path:
     return Path(__file__).parent / "generic"
 
 
-def _build_pyproject_toml(repo_name: str, notebook_type: str) -> str:
+def _build_pyproject_toml(
+    repo_name: str,
+    notebook_type: str,
+    extras: list[str] | None = None,
+) -> str:
     """Generate a pyproject.toml string for the new course directory."""
     notebook_dep = "jupyter" if notebook_type == "jupyter" else "marimo"
+    deps = [notebook_dep, "gitautopush"]
+    if extras:
+        deps.extend(extras)
+    deps_str = "\n".join(f'    "{d}",' for d in deps)
     return f"""\
 [project]
 name = "{repo_name}"
 version = "0.1.0"
 requires-python = ">=3.13"
 dependencies = [
-    "{notebook_dep}",
-    "gitautopush",
+{deps_str}
 ]
 
 [build-system]
@@ -105,12 +121,36 @@ def main() -> None:
         choices=["jupyter", "marimo"],
         default=None,
     )
+    parser.add_argument(
+        "--extras",
+        nargs="*",
+        default=None,
+        help="dependency groups to include (e.g. python data viz geo db ml)",
+    )
 
     args = parser.parse_args()
 
     # Validate -n / --freq interaction
     if args.freq is not None and args.num_sessions is None:
         parser.error("--freq requires -n/--num-sessions")
+
+    # Validate --extras group names
+    if args.extras is not None:
+        unknown = [g for g in args.extras if g not in EXTRAS_GROUPS]
+        if unknown:
+            parser.error(f"unknown extras group(s): {', '.join(unknown)}")
+
+    # Resolve extras groups into a flat sorted+deduped list
+    extra_packages: list[str] | None = None
+    if args.extras:
+        seen: set[str] = set()
+        flat: list[str] = []
+        for group in args.extras:
+            for pkg in EXTRAS_GROUPS[group]:
+                if pkg not in seen:
+                    seen.add(pkg)
+                    flat.append(pkg)
+        extra_packages = sorted(flat)
 
     notebook_type: str = (
         args.notebook_type
@@ -160,7 +200,7 @@ def main() -> None:
             Path(f"{destination}/{notebook_base}.py").write_text(MARIMO_TEMPLATE)
 
     # Write pyproject.toml
-    pyproject_content = _build_pyproject_toml(repo_name, notebook_type)
+    pyproject_content = _build_pyproject_toml(repo_name, notebook_type, extra_packages)
     Path(f"{destination}/pyproject.toml").write_text(pyproject_content)
 
     # Authenticate with GitHub API
