@@ -1464,3 +1464,124 @@ def test_verbose_config_default_false(
     main()
     output = capsys.readouterr().out
     assert "Template:" not in output
+
+
+# ---------------------------------------------------------------------------
+# --dry-run flag tests
+# ---------------------------------------------------------------------------
+
+
+def test_dry_run_no_directory_created(
+    course_env: dict[str, Any],
+) -> None:
+    """--dry-run does not create the destination directory."""
+    sys.argv = ["setup-course", "-c", "acme", "-t", "python", "--dry-run"]
+    main()
+    dest = course_env["tmp_path"] / "acme-python-2026-03"
+    assert not dest.exists()
+
+
+def test_dry_run_no_subprocess_calls(
+    course_env: dict[str, Any],
+) -> None:
+    """--dry-run does not invoke any subprocess commands."""
+    sys.argv = ["setup-course", "-c", "acme", "-t", "python", "--dry-run"]
+    main()
+    course_env["mock_run"].assert_not_called()
+
+
+def test_dry_run_no_github_api_calls(
+    course_env: dict[str, Any],
+) -> None:
+    """--dry-run does not call GitHub API."""
+    sys.argv = ["setup-course", "-c", "acme", "-t", "python", "--dry-run"]
+    main()
+    course_env["github_cls"].assert_not_called()
+    course_env["user"].create_repo.assert_not_called()
+
+
+def test_dry_run_prints_repo_name(
+    course_env: dict[str, Any],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """--dry-run prints the repo name in the summary."""
+    sys.argv = ["setup-course", "-c", "acme", "-t", "python", "--dry-run"]
+    main()
+    output = capsys.readouterr().out
+    assert "acme-python-2026-03" in output
+    assert "[dry-run]" in output
+
+
+def test_dry_run_prints_notebook_filenames(
+    course_env: dict[str, Any],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """--dry-run prints notebook filenames."""
+    sys.argv = [
+        "setup-course",
+        "-c",
+        "acme",
+        "-t",
+        "python",
+        "-n",
+        "2",
+        "--dry-run",
+    ]
+    main()
+    output = capsys.readouterr().out
+    assert "acme-python-2026-03-19.ipynb" in output
+    assert "acme-python-2026-03-20.ipynb" in output
+
+
+def test_dry_run_prints_dependencies(
+    course_env: dict[str, Any],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """--dry-run prints the dependency list."""
+    sys.argv = [
+        "setup-course",
+        "-c",
+        "acme",
+        "-t",
+        "python",
+        "--dry-run",
+        "--extras",
+        "data",
+    ]
+    main()
+    output = capsys.readouterr().out
+    assert "jupyter" in output
+    assert "gitautopush" in output
+    assert "numpy" in output
+
+
+def test_dry_run_uses_placeholder_github_user(
+    course_env: dict[str, Any],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """--dry-run uses placeholder instead of actual GitHub username."""
+    sys.argv = ["setup-course", "-c", "acme", "-t", "python", "--dry-run"]
+    main()
+    output = capsys.readouterr().out
+    assert "<your-github-username>" in output
+
+
+def test_dry_run_marimo_shows_py_extension(
+    course_env: dict[str, Any],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """--dry-run with marimo shows .py notebook extensions."""
+    sys.argv = [
+        "setup-course",
+        "-c",
+        "acme",
+        "-t",
+        "python",
+        "--notebook-type",
+        "marimo",
+        "--dry-run",
+    ]
+    main()
+    output = capsys.readouterr().out
+    assert "acme-python-2026-03-19.py" in output
+    assert "marimo" in output
