@@ -48,6 +48,7 @@ notebook_type = "jupyter"   # or "marimo"
 | `[paths] archive` | Yes | Directory where retired courses are archived. |
 | `[paths] readme_source` | No | Local path or URL to a custom README for new courses. Omit to use the bundled default. |
 | `[defaults] notebook_type` | No | `"jupyter"` (default) or `"marimo"`. |
+| `[defaults] verbose` | No | `true` or `false` (default). Sets the default verbosity for `setup-course`. |
 
 To regenerate the config file, use `setup-course-config --force`.
 
@@ -69,6 +70,8 @@ setup-course -c Acme -t python-intro
 | `--notebook-type` | `jupyter` or `marimo` (overrides config default) |
 | `--extras` | Dependency groups to add to the course `pyproject.toml` (see below) |
 | `--add-imports` | Pre-populate notebooks with import statements from `--extras` groups |
+| `-v`, `--verbose` | Show detailed output (paths, filenames, dependencies) |
+| `--dry-run` | Preview what would be created without making any changes |
 
 #### Dependency groups
 
@@ -153,7 +156,7 @@ Run tests, format, and lint:
 
 ```bash
 uv run pytest
-uv run black src/ tests/
+uv run ruff format src/ tests/
 uv run ruff check src/ tests/
 uv run mypy --strict src/
 ```
