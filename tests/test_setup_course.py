@@ -11,7 +11,9 @@ import pytest
 
 from setup_course_github.setup_course import (
     EXTRAS_GROUPS,
+    IMPORT_MAP,
     _build_git_config,
+    _build_import_lines,
     _build_pyproject_toml,
     _get_template_dir,
     _notebook_dates,
@@ -981,3 +983,167 @@ def test_no_extras_flag_produces_only_base_deps(course_env: dict[str, Any]) -> N
         data = tomllib.load(f)
     deps = data["project"]["dependencies"]
     assert deps == ["jupyter", "gitautopush"]
+
+
+# ---------------------------------------------------------------------------
+# _build_import_lines tests
+# ---------------------------------------------------------------------------
+
+
+def test_build_import_lines_data_group() -> None:
+    """data group produces numpy, pandas, plotly imports."""
+    result = _build_import_lines(["data"])
+    assert "import numpy as np" in result
+    assert "import pandas as pd" in result
+    assert "import plotly.express as px" in result
+
+
+def test_build_import_lines_multiple_groups() -> None:
+    """Multiple groups merge their imports."""
+    result = _build_import_lines(["data", "viz"])
+    assert "import numpy as np" in result
+    assert "import matplotlib.pyplot as plt" in result
+
+
+def test_build_import_lines_empty_list() -> None:
+    """Empty group list returns empty string."""
+    assert _build_import_lines([]) == ""
+
+
+def test_build_import_lines_python_group_has_no_imports() -> None:
+    """python group has no import lines (ipython is interactive)."""
+    assert _build_import_lines(["python"]) == ""
+
+
+def test_build_import_lines_deduplicates() -> None:
+    """Same group twice doesn't duplicate imports."""
+    result = _build_import_lines(["data", "data"])
+    assert result.count("import numpy as np") == 1
+
+
+def test_build_import_lines_unknown_group_ignored() -> None:
+    """Unknown groups are silently skipped (no KeyError)."""
+    result = _build_import_lines(["nonexistent"])
+    assert result == ""
+
+
+# ---------------------------------------------------------------------------
+# --add-imports integration tests
+# ---------------------------------------------------------------------------
+
+
+def test_add_imports_jupyter_with_data(course_env: dict[str, Any]) -> None:
+    """--add-imports with --extras data populates Jupyter notebook with imports."""
+    sys.argv = [
+        "setup-course",
+        "-c",
+        "acme",
+        "-t",
+        "python",
+        "--extras",
+        "data",
+        "--add-imports",
+    ]
+    main()
+    dest = course_env["tmp_path"] / "acme-python-2026-03"
+    content = (dest / "acme-python-2026-03-19.ipynb").read_text()
+    assert "import pandas as pd" in content
+    assert "import numpy as np" in content
+
+
+def test_add_imports_jupyter_is_valid_json(course_env: dict[str, Any]) -> None:
+    """Jupyter notebook with imports is valid JSON."""
+    import json as json_mod
+
+    sys.argv = [
+        "setup-course",
+        "-c",
+        "acme",
+        "-t",
+        "python",
+        "--extras",
+        "data",
+        "--add-imports",
+    ]
+    main()
+    dest = course_env["tmp_path"] / "acme-python-2026-03"
+    data = json_mod.loads((dest / "acme-python-2026-03-19.ipynb").read_text())
+    assert len(data["cells"]) == 1
+    assert data["cells"][0]["cell_type"] == "code"
+
+
+def test_add_imports_marimo_with_data(course_env: dict[str, Any]) -> None:
+    """--add-imports with --extras data populates Marimo notebook with imports."""
+    sys.argv = [
+        "setup-course",
+        "-c",
+        "acme",
+        "-t",
+        "python",
+        "--extras",
+        "data",
+        "--add-imports",
+        "--notebook-type",
+        "marimo",
+    ]
+    main()
+    dest = course_env["tmp_path"] / "acme-python-2026-03"
+    content = (dest / "acme-python-2026-03-19.py").read_text()
+    assert "import pandas as pd" in content
+    assert "import numpy as np" in content
+    assert "import marimo" in content
+
+
+def test_add_imports_without_extras_is_noop(course_env: dict[str, Any]) -> None:
+    """--add-imports without --extras doesn't add any imports."""
+    sys.argv = ["setup-course", "-c", "acme", "-t", "python", "--add-imports"]
+    main()
+    dest = course_env["tmp_path"] / "acme-python-2026-03"
+    content = (dest / "acme-python-2026-03-19.ipynb").read_text()
+    assert "import pandas" not in content
+    assert '"cells": []' in content
+
+
+def test_no_add_imports_flag_no_imports(course_env: dict[str, Any]) -> None:
+    """Without --add-imports, extras don't produce imports in notebooks."""
+    sys.argv = [
+        "setup-course",
+        "-c",
+        "acme",
+        "-t",
+        "python",
+        "--extras",
+        "data",
+    ]
+    main()
+    dest = course_env["tmp_path"] / "acme-python-2026-03"
+    content = (dest / "acme-python-2026-03-19.ipynb").read_text()
+    assert "import pandas" not in content
+
+
+def test_add_imports_multiple_sessions(course_env: dict[str, Any]) -> None:
+    """--add-imports populates ALL notebooks when using -n."""
+    sys.argv = [
+        "setup-course",
+        "-c",
+        "acme",
+        "-t",
+        "python",
+        "-n",
+        "3",
+        "--extras",
+        "data",
+        "--add-imports",
+    ]
+    main()
+    dest = course_env["tmp_path"] / "acme-python-2026-03"
+    for day in ["19", "20", "21"]:
+        content = (dest / f"acme-python-2026-03-{day}.ipynb").read_text()
+        assert "import pandas as pd" in content
+
+
+def test_import_map_exists() -> None:
+    """IMPORT_MAP is a dict with expected keys."""
+    assert isinstance(IMPORT_MAP, dict)
+    expected_keys = {"python", "data", "viz", "geo", "db", "ml"}
+    assert set(IMPORT_MAP.keys()) == expected_keys
