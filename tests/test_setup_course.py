@@ -17,6 +17,7 @@ from setup_course_github.setup_course import (
     _build_pyproject_toml,
     _get_template_dir,
     _notebook_dates,
+    _print_status,
     main,
 )
 
@@ -1265,3 +1266,68 @@ def test_import_map_exists() -> None:
     assert isinstance(IMPORT_MAP, dict)
     expected_keys = {"python", "data", "viz", "geo", "db", "ml"}
     assert set(IMPORT_MAP.keys()) == expected_keys
+
+
+# ---------------------------------------------------------------------------
+# Progress indicator tests
+# ---------------------------------------------------------------------------
+
+
+def test_print_status_prints_message(capsys: pytest.CaptureFixture[str]) -> None:
+    """_print_status prints the given message to stdout."""
+    _print_status("Hello world")
+    captured = capsys.readouterr()
+    assert "Hello world" in captured.out
+
+
+def test_progress_messages_appear_in_order(
+    course_env: dict[str, Any],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """All progress messages appear in stdout in the correct order."""
+    sys.argv = ["setup-course", "-c", "acme", "-t", "python"]
+    main()
+    output = capsys.readouterr().out
+    expected = [
+        "Creating course directory...",
+        "Initializing git repository...",
+        "Creating notebook files...",
+        "Writing project configuration...",
+        "Creating GitHub repository...",
+        "Pushing to GitHub...",
+        "Installing dependencies...",
+        "Done! Course ready at acme-python-2026-03",
+    ]
+    positions = []
+    for msg in expected:
+        pos = output.find(msg)
+        assert pos != -1, f"Missing progress message: {msg}"
+        positions.append(pos)
+    assert positions == sorted(positions), "Progress messages out of order"
+
+
+def test_progress_message_readme_appears_when_readme_source_set(
+    course_env: dict[str, Any],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """'Setting up README...' appears only when readme_source is configured."""
+    custom_readme = course_env["tmp_path"] / "my-readme.md"
+    custom_readme.write_text("# Custom\n")
+    course_env["config"].readme_source = str(custom_readme)
+
+    sys.argv = ["setup-course", "-c", "acme", "-t", "python"]
+    main()
+    output = capsys.readouterr().out
+    assert "Setting up README..." in output
+
+
+def test_progress_message_readme_absent_when_no_readme_source(
+    course_env: dict[str, Any],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """'Setting up README...' does NOT appear when readme_source is None."""
+    course_env["config"].readme_source = None
+    sys.argv = ["setup-course", "-c", "acme", "-t", "python"]
+    main()
+    output = capsys.readouterr().out
+    assert "Setting up README..." not in output

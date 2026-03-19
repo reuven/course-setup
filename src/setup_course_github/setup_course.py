@@ -133,6 +133,11 @@ def _build_import_lines(groups: list[str]) -> str:
     return "\n".join(lines)
 
 
+def _print_status(msg: str) -> None:
+    """Print a progress status message."""
+    print(msg)
+
+
 def main() -> None:
     config = load_config()
     extras_groups = {**EXTRAS_GROUPS, **config.custom_extras}
@@ -210,14 +215,15 @@ def main() -> None:
 
     template_dir = _get_template_dir()
 
-    print(f'Copying from "{template_dir}" to "{destination}"')
-
+    _print_status("Creating course directory...")
     shutil.copytree(str(template_dir), destination)
 
+    _print_status("Initializing git repository...")
     subprocess.run(["git", "init"], cwd=destination, check=True)
 
     # Replace README if a custom source is configured
     if config.readme_source is not None:
+        _print_status("Setting up README...")
         readme_path = Path(f"{destination}/README.md")
         source = config.readme_source
         if source.startswith(("http://", "https://")):
@@ -227,6 +233,7 @@ def main() -> None:
             shutil.copy2(source, str(readme_path))
 
     # Handle notebook files
+    _print_status("Creating notebook files...")
     ipynb_path = Path(f"{destination}/Course notebook.ipynb")
     ipynb_path.unlink()
 
@@ -284,10 +291,12 @@ if __name__ == "__main__":
             Path(f"{destination}/{notebook_base}.py").write_text(marimo_content)
 
     # Write pyproject.toml
+    _print_status("Writing project configuration...")
     pyproject_content = _build_pyproject_toml(repo_name, notebook_type, extra_packages)
     Path(f"{destination}/pyproject.toml").write_text(pyproject_content)
 
     # Authenticate with GitHub API
+    _print_status("Creating GitHub repository...")
     github = Github(config.github_token)
     user = cast(AuthenticatedUser, github.get_user())
 
@@ -300,6 +309,7 @@ if __name__ == "__main__":
     user.create_repo(name=repo_name, private=False)
 
     # Initial commit and push
+    _print_status("Pushing to GitHub...")
     subprocess.run(["git", "add", "."], cwd=destination, check=True)
     subprocess.run(
         ["git", "commit", "-m", "Initial commit"],
@@ -313,7 +323,10 @@ if __name__ == "__main__":
     )
 
     # Install dependencies
+    _print_status("Installing dependencies...")
     subprocess.run(["uv", "sync"], cwd=destination, check=True)
+
+    _print_status(f"Done! Course ready at {destination}")
 
 
 if __name__ == "__main__":  # pragma: no cover
