@@ -11,6 +11,7 @@ import pytest
 
 from setup_course_github.setup_course import (
     EXTRAS_GROUPS,
+    _build_git_config,
     _build_pyproject_toml,
     _get_template_dir,
     _notebook_dates,
@@ -791,3 +792,192 @@ def test_extras_groups_dict_exists() -> None:
     assert isinstance(EXTRAS_GROUPS, dict)
     expected_keys = {"python", "data", "viz", "geo", "db", "ml"}
     assert set(EXTRAS_GROUPS.keys()) == expected_keys
+
+
+# ---------------------------------------------------------------------------
+# Hardening tests
+# ---------------------------------------------------------------------------
+
+
+def test_pyproject_toml_is_valid_toml(course_env: dict[str, Any]) -> None:
+    """The generated pyproject.toml must be parseable as valid TOML."""
+    import tomllib
+
+    sys.argv = ["setup-course", "-c", "acme", "-t", "python"]
+    main()
+    dest = course_env["tmp_path"] / "acme-python-2026-03"
+    with open(dest / "pyproject.toml", "rb") as f:
+        data = tomllib.load(f)
+    assert data["project"]["name"] == "acme-python-2026-03"
+    assert "dependencies" in data["project"]
+
+
+def test_pyproject_toml_with_extras_is_valid_toml(course_env: dict[str, Any]) -> None:
+    """pyproject.toml with --extras must still be valid TOML."""
+    import tomllib
+
+    sys.argv = [
+        "setup-course",
+        "-c",
+        "acme",
+        "-t",
+        "python",
+        "--extras",
+        "python",
+        "data",
+        "viz",
+    ]
+    main()
+    dest = course_env["tmp_path"] / "acme-python-2026-03"
+    with open(dest / "pyproject.toml", "rb") as f:
+        data = tomllib.load(f)
+    deps = data["project"]["dependencies"]
+    assert "jupyter" in deps
+    assert "gitautopush" in deps
+    assert "ipython" in deps
+    assert "numpy" in deps
+    assert "plotly" in deps
+    assert "matplotlib" in deps
+
+
+def test_jupyter_notebook_content_is_valid_json(course_env: dict[str, Any]) -> None:
+    """Jupyter notebook must be valid JSON with expected ipynb keys."""
+    import json
+
+    sys.argv = ["setup-course", "-c", "acme", "-t", "python"]
+    main()
+    dest = course_env["tmp_path"] / "acme-python-2026-03"
+    content = json.loads((dest / "acme-python-2026-03-19.ipynb").read_text())
+    assert "cells" in content
+    assert "metadata" in content
+    assert "nbformat" in content
+
+
+def test_build_pyproject_toml_empty_extras_list() -> None:
+    """extras=[] (empty list) should behave like extras=None — no extras added."""
+    result = _build_pyproject_toml("test-repo", "jupyter", extras=[])
+    assert '"jupyter"' in result
+    assert '"gitautopush"' in result
+    assert '"numpy"' not in result
+    assert '"ipython"' not in result
+
+
+def test_build_pyproject_toml_output_is_valid_toml() -> None:
+    """_build_pyproject_toml output must be parseable as TOML."""
+    import tomllib
+
+    result = _build_pyproject_toml("my-repo", "jupyter", extras=["numpy", "pandas"])
+    data = tomllib.loads(result)
+    assert data["project"]["name"] == "my-repo"
+    deps = data["project"]["dependencies"]
+    assert "jupyter" in deps
+    assert "numpy" in deps
+    assert "pandas" in deps
+
+
+def test_extras_duplicate_group_deduplicates(course_env: dict[str, Any]) -> None:
+    """Passing the same group twice should not duplicate packages."""
+    sys.argv = [
+        "setup-course",
+        "-c",
+        "acme",
+        "-t",
+        "python",
+        "--extras",
+        "data",
+        "data",
+    ]
+    main()
+    dest = course_env["tmp_path"] / "acme-python-2026-03"
+    content = (dest / "pyproject.toml").read_text()
+    # "numpy" should appear exactly once
+    assert content.count('"numpy"') == 1
+    assert content.count('"pandas"') == 1
+
+
+def test_extras_all_groups(course_env: dict[str, Any]) -> None:
+    """All six groups combined should include every package without error."""
+    sys.argv = [
+        "setup-course",
+        "-c",
+        "acme",
+        "-t",
+        "python",
+        "--extras",
+        "python",
+        "data",
+        "viz",
+        "geo",
+        "db",
+        "ml",
+    ]
+    main()
+    dest = course_env["tmp_path"] / "acme-python-2026-03"
+    content = (dest / "pyproject.toml").read_text()
+    all_pkgs: set[str] = set()
+    for pkgs in EXTRAS_GROUPS.values():
+        all_pkgs.update(pkgs)
+    for pkg in all_pkgs:
+        assert f'"{pkg}"' in content, f"{pkg} missing when all groups specified"
+
+
+def test_invalid_notebook_type_rejected(course_env: dict[str, Any]) -> None:
+    """--notebook-type with an invalid value should be rejected by argparse."""
+    sys.argv = [
+        "setup-course",
+        "-c",
+        "acme",
+        "-t",
+        "python",
+        "--notebook-type",
+        "latex",
+    ]
+    with pytest.raises(SystemExit):
+        main()
+
+
+def test_notebook_dates_zero_count() -> None:
+    """_notebook_dates with count=0 returns an empty list."""
+    result = _notebook_dates(datetime.date(2026, 3, 19), 0, "daily")
+    assert result == []
+
+
+def test_client_topic_with_spaces_in_name(course_env: dict[str, Any]) -> None:
+    """Client and topic values flow directly into directory/repo names."""
+    sys.argv = ["setup-course", "-c", "Acme-Corp", "-t", "Python-Intro"]
+    main()
+    dest = course_env["tmp_path"] / "Acme-Corp-Python-Intro-2026-03"
+    assert dest.exists()
+    course_env["user"].create_repo.assert_called_once_with(
+        name="Acme-Corp-Python-Intro-2026-03", private=False
+    )
+
+
+def test_build_git_config_contains_remote_url() -> None:
+    """_build_git_config produces config with correct remote URL."""
+    result = _build_git_config("myuser", "myrepo")
+    assert "git@github.com:myuser/myrepo.git" in result
+    assert '[remote "origin"]' in result
+    assert '[branch "main"]' in result
+    assert "repositoryformatversion" in result
+
+
+def test_build_git_config_not_hardcoded() -> None:
+    """_build_git_config uses the provided username, not a hardcoded one."""
+    result = _build_git_config("alice", "her-course")
+    assert "alice" in result
+    assert "her-course" in result
+    assert "reuven" not in result
+
+
+def test_no_extras_flag_produces_only_base_deps(course_env: dict[str, Any]) -> None:
+    """When --extras is not passed at all, only base deps appear."""
+    import tomllib
+
+    sys.argv = ["setup-course", "-c", "acme", "-t", "python"]
+    main()
+    dest = course_env["tmp_path"] / "acme-python-2026-03"
+    with open(dest / "pyproject.toml", "rb") as f:
+        data = tomllib.load(f)
+    deps = data["project"]["dependencies"]
+    assert deps == ["jupyter", "gitautopush"]
