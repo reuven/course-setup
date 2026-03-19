@@ -263,16 +263,16 @@ def test_retire_course_no_os_chdir() -> None:
 
 
 def test_main_calls_retire_course(tmp_path: Path) -> None:
-    """main() must parse --dirname and call retire_course with it."""
+    """main() must parse positional dirname and call retire_course with it."""
     with patch("setup_course_github.retire_course.retire_course") as mock_retire:
-        with patch("sys.argv", ["retire-course", "-d", str(tmp_path)]):
+        with patch("sys.argv", ["retire-course", str(tmp_path)]):
             main()
 
     mock_retire.assert_called_once_with(str(tmp_path))
 
 
 def test_main_requires_dirname() -> None:
-    """main() must exit if -d/--dirname is not supplied."""
+    """main() must exit if dirname is not supplied."""
     with patch("sys.argv", ["retire-course"]):
         with pytest.raises(SystemExit):
             main()

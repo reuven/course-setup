@@ -52,7 +52,7 @@ def retire_course(dirname: str) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("-d", "--dirname", required=True)
+    parser.add_argument("dirname", help="Path to the course directory to retire")
     args = parser.parse_args()
 
     retire_course(args.dirname)

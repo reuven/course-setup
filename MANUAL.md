@@ -246,14 +246,14 @@ Creates `Acme-python-intro-2026-03-19.py` instead of the `.ipynb`.
 #### Synopsis
 
 ```
-retire-course -d DIRNAME
+retire-course DIRNAME
 ```
 
-#### Options
+#### Arguments
 
-| Option | Required | Description |
-|--------|----------|-------------|
-| `-d`, `--dirname` | Yes | Path to the course directory to retire. |
+| Argument | Required | Description |
+|----------|----------|-------------|
+| `DIRNAME` | Yes | Path to the course directory to retire. |
 
 #### What it does
 
@@ -266,7 +266,7 @@ retire-course -d DIRNAME
 #### Example
 
 ```
-retire-course -d ./Acme-2026-03-18
+retire-course ./Acme-2026-03-18
 ```
 
 If your archive path is `/Users/reuven/Courses/Archive`, this moves the
@@ -325,7 +325,7 @@ setup-course-config
 setup-course -c Acme -t python-intro
 
 # After the course is over
-retire-course -d ./Acme-python-intro-2026-03
+retire-course ./Acme-python-intro-2026-03
 ```
 
 ---

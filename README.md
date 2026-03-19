@@ -87,12 +87,12 @@ setup-course -c Acme -t python-intro -n 5 --freq weekly # 5 weekly sessions
 ### `retire-course` — Archive a course repo
 
 ```bash
-retire-course -d ./Acme-python-intro-2026-03
+retire-course ./Acme-python-intro-2026-03
 ```
 
-| Flag | Description |
-|------|-------------|
-| `-d`, `--dirname` | Path to the course directory to retire (required) |
+| Argument | Description |
+|----------|-------------|
+| `DIRNAME` | Path to the course directory to retire |
 
 This will:
 
