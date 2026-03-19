@@ -130,6 +130,7 @@ Fill in each section:
 | `[paths] archive` | Yes | Absolute path to the directory where retired courses are stored. |
 | `[paths] readme_source` | No | Path or URL to a custom README.md. When set, `setup-course` uses this instead of the bundled default. Can be a local file path or an `https://` URL. |
 | `[defaults] notebook_type` | No | `"jupyter"` (default) or `"marimo"`. Controls which kind of notebook file `setup-course` creates. |
+| `[defaults] verbose` | No | `true` or `false` (default). When `true`, `setup-course` prints detailed output by default. Can be overridden with `-v` on the command line. |
 | `[extras] <name>` | No | Custom dependency groups for `--extras`. Each key is a group name, each value is a list of package names. |
 
 *You can omit the token from the config file and set the `GITHUB_TOKEN`
@@ -145,7 +146,7 @@ precedence.
 #### Synopsis
 
 ```
-setup-course -c CLIENT -t TOPIC [-d YYYY-MM] [-n NUM] [--freq daily|weekly] [--notebook-type TYPE] [--extras GROUP ...] [--add-imports]
+setup-course -c CLIENT -t TOPIC [-d YYYY-MM] [-n NUM] [--freq daily|weekly] [--notebook-type TYPE] [--extras GROUP ...] [--add-imports] [-v] [--dry-run]
 ```
 
 #### Options
@@ -160,6 +161,8 @@ setup-course -c CLIENT -t TOPIC [-d YYYY-MM] [-n NUM] [--freq daily|weekly] [--n
 | `--notebook-type` | No | `jupyter` or `marimo`. Overrides the default from your config file. |
 | `--extras` | No | One or more dependency groups to add to the course `pyproject.toml`. See [Dependency groups](#dependency-groups) below. |
 | `--add-imports` | No | Pre-populate each notebook with import statements matching the `--extras` groups. Has no effect without `--extras`. |
+| `-v`, `--verbose` | No | Show detailed output for each step: template and destination paths, notebook filenames, dependency list, GitHub username, repo name, and remote URL. Overrides the `[defaults] verbose` config setting. |
+| `--dry-run` | No | Print a summary of what would be created (repo name, directory, notebooks, dependencies) without making any changes. No filesystem, Git, or GitHub API calls are made. |
 
 #### Dependency groups
 
@@ -304,6 +307,37 @@ setup-course -c Acme -t python-intro --notebook-type marimo
 ```
 
 Creates `Acme-python-intro-2026-03-19.py` instead of the `.ipynb`.
+
+Dry run (preview without creating anything):
+
+```
+setup-course -c Acme -t python-intro --extras data --dry-run
+```
+
+Outputs a summary of what would be created, then exits. No files, Git
+repos, or GitHub repos are created.
+
+Verbose output:
+
+```
+setup-course -c Acme -t python-intro -v
+```
+
+Shows detailed information about each step, including template path,
+destination, notebook filenames, dependencies, GitHub user, and remote URL.
+
+#### Error handling and rollback
+
+If any step fails during course creation (e.g., the GitHub API call fails
+or `git push` is rejected), `setup-course` automatically rolls back
+completed steps in reverse order:
+
+- If the GitHub repository was created, it is deleted.
+- If the local directory was created, it is removed.
+
+A clear error message is printed along with the rollback actions. The
+command exits with code 1 on failure. If a cleanup action itself fails, a
+warning is printed and the remaining cleanup actions still execute.
 
 ---
 
