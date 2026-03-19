@@ -203,18 +203,23 @@ def main() -> None:
     if args.freq is not None and args.num_sessions is None:
         parser.error("--freq requires -n/--num-sessions")
 
-    # Validate --extras group names
-    if args.extras is not None:
-        unknown = [g for g in args.extras if g not in extras_groups]
+    # Resolve --extras: CLI flag overrides config default_extras_group
+    effective_extras: list[str] | None = args.extras
+    if effective_extras is None and config.default_extras_group is not None:
+        effective_extras = [config.default_extras_group]
+
+    # Validate extras group names
+    if effective_extras is not None:
+        unknown = [g for g in effective_extras if g not in extras_groups]
         if unknown:
             parser.error(f"unknown extras group(s): {', '.join(unknown)}")
 
     # Resolve extras groups into a flat sorted+deduped list
     extra_packages: list[str] | None = None
-    if args.extras:
+    if effective_extras:
         seen: set[str] = set()
         flat: list[str] = []
-        for group in args.extras:
+        for group in effective_extras:
             for pkg in extras_groups[group]:
                 if pkg not in seen:
                     seen.add(pkg)
@@ -287,8 +292,8 @@ def main() -> None:
         ipynb_path.unlink()
 
         import_code = ""
-        if args.add_imports and args.extras:
-            import_code = _build_import_lines(args.extras)
+        if args.add_imports and effective_extras:
+            import_code = _build_import_lines(effective_extras)
 
         for d in dates:
             notebook_base = f"{args.client}-{args.topic}-{d.strftime('%Y-%m-%d')}"
