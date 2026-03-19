@@ -79,7 +79,7 @@ setup-course -c Acme -t python-intro
 | Group | Packages |
 |-------|----------|
 | `python` | ipython |
-| `data` | numpy, pandas, xlrd, openpyxl |
+| `data` | numpy, pandas, xlrd, openpyxl, pyarrow |
 | `viz` | matplotlib, seaborn, plotly |
 | `geo` | geopandas, folium, shapely |
 | `db` | duckdb, sqlalchemy |

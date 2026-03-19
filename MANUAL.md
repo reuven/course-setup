@@ -173,7 +173,7 @@ packages to the generated `pyproject.toml`:
 | Group | Packages | Use case |
 |-------|----------|----------|
 | `python` | ipython | Python courses (enhanced REPL in Jupyter) |
-| `data` | numpy, pandas, xlrd, openpyxl | Data / Pandas courses |
+| `data` | numpy, pandas, xlrd, openpyxl, pyarrow | Data / Pandas courses |
 | `viz` | matplotlib, seaborn, plotly | Visualization libraries (matplotlib, seaborn, plotly) |
 | `geo` | geopandas, folium, shapely | Geospatial / mapping courses |
 | `db` | duckdb, sqlalchemy | Database courses |
@@ -289,7 +289,7 @@ With dependency groups:
 setup-course -c Acme -t pandas --extras python data
 ```
 
-Creates the course with ipython, numpy, pandas, xlrd, openpyxl, and plotly
+Creates the course with ipython, numpy, pandas, xlrd, openpyxl, pyarrow, and plotly
 added to the `pyproject.toml` dependencies alongside jupyter and gitautopush.
 
 With pre-populated imports:
