@@ -39,16 +39,11 @@
 
 [dependency-groups]
 dev = [
-    "black>=26.3.1",
     "mypy>=1.19.1",
     "pytest>=9.0.2",
     "pytest-cov>=7.0.0",
     "ruff>=0.15.6",
 ]
-
-[tool.black]
-  line-length = 88
-  target-version = ["py313"]
 
 [tool.ruff]
   line-length = 88
@@ -56,6 +51,9 @@ dev = [
 
 [tool.ruff.lint]
   select = ["E", "F", "I"]
+
+[tool.ruff.format]
+  quote-style = "double"
 
 [tool.mypy]
   strict = true

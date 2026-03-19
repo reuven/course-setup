@@ -300,7 +300,7 @@ app = marimo.App()
 
 @app.cell
 def _():
-{chr(10).join('    ' + line for line in import_code.split(chr(10)))}
+{chr(10).join("    " + line for line in import_code.split(chr(10)))}
     return
 
 
