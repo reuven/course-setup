@@ -4,6 +4,7 @@ import argparse
 import datetime
 import shutil
 import subprocess
+import sys
 
 from setup_course_github import get_github
 from setup_course_github.config import load_config
@@ -52,10 +53,24 @@ def retire_course(dirname: str) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("dirname", help="Path to the course directory to retire")
+    parser.add_argument(
+        "dirnames", nargs="+", help="Path(s) to course directories to retire"
+    )
     args = parser.parse_args()
 
-    retire_course(args.dirname)
+    errors: list[tuple[str, str]] = []
+    for dirname in args.dirnames:
+        try:
+            retire_course(dirname)
+        except Exception as e:
+            print(f"Error retiring {dirname}: {e}")
+            errors.append((dirname, str(e)))
+
+    if errors:
+        print(f"\n{len(errors)} error(s) occurred:")
+        for dirname, msg in errors:
+            print(f"  {dirname}: {msg}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":  # pragma: no cover
