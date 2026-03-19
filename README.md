@@ -49,6 +49,7 @@ notebook_type = "jupyter"   # or "marimo"
 | `[paths] readme_source` | No | Local path or URL to a custom README for new courses. Omit to use the bundled default. |
 | `[defaults] notebook_type` | No | `"jupyter"` (default) or `"marimo"`. |
 | `[defaults] verbose` | No | `true` or `false` (default). Sets the default verbosity for `setup-course`. |
+| `[defaults] extras_group` | No | Default dependency group when `--extras` is not passed (e.g. `"python"`). |
 
 To regenerate the config file, use `setup-course-config --force`.
 

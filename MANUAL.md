@@ -131,6 +131,7 @@ Fill in each section:
 | `[paths] readme_source` | No | Path or URL to a custom README.md. When set, `setup-course` uses this instead of the bundled default. Can be a local file path or an `https://` URL. |
 | `[defaults] notebook_type` | No | `"jupyter"` (default) or `"marimo"`. Controls which kind of notebook file `setup-course` creates. |
 | `[defaults] verbose` | No | `true` or `false` (default). When `true`, `setup-course` prints detailed output by default. Can be overridden with `-v` on the command line. |
+| `[defaults] extras_group` | No | Name of a dependency group to use by default when `--extras` is not passed on the command line. Can be a built-in group (e.g. `"python"`, `"data"`) or a custom group defined in `[extras]`. |
 | `[extras] <name>` | No | Custom dependency groups for `--extras`. Each key is a group name, each value is a list of package names. |
 
 *You can omit the token from the config file and set the `GITHUB_TOKEN`
