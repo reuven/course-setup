@@ -203,6 +203,22 @@ nlp = ["spacy", "nltk"]
 Custom groups are merged with the built-in groups. If a custom group has the
 same name as a built-in group, the custom definition takes precedence.
 
+##### Group references
+
+Entries in a custom group can be package names **or** references to other
+groups (built-in or custom). Referenced groups are recursively expanded into
+their packages:
+
+```toml
+[extras]
+reuven = ["python", "data", "plotly"]
+```
+
+Using `--extras reuven` (or setting `extras_group = "reuven"` in `[defaults]`)
+installs everything from the `python` group, everything from the `data` group,
+plus `plotly` as a standalone package. Circular references are detected and
+rejected with a clear error.
+
 #### What it does
 
 1. **Auto-generates a repo name** from the client, topic, and date:

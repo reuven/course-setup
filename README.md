@@ -85,11 +85,13 @@ setup-course -c Acme -t python-intro
 | `db` | duckdb, sqlalchemy |
 | `ml` | scikit-learn |
 
-You can also define custom groups in your `config.toml` under `[extras]`:
+You can also define custom groups in your `config.toml` under `[extras]`.
+Entries can be package names or references to other groups (built-in or custom):
 
 ```toml
 [extras]
 finance = ["yfinance", "pandas-datareader"]
+reuven = ["python", "data", "plotly"]   # expands python & data groups + plotly
 ```
 
 Example — a Pandas course with Python extras and data/viz packages:
