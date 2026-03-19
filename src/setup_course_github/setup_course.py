@@ -2,7 +2,6 @@
 
 import argparse
 import datetime
-import os
 import shutil
 import subprocess
 import urllib.request
@@ -79,6 +78,12 @@ def _build_git_config(username: str, repo: str) -> str:
 """
 
 
+def _notebook_dates(start: datetime.date, count: int, freq: str) -> list[datetime.date]:
+    """Return a list of dates for notebook files."""
+    step = datetime.timedelta(days=1 if freq == "daily" else 7)
+    return [start + step * i for i in range(count)]
+
+
 def main() -> None:
     config = load_config()
 
@@ -87,12 +92,25 @@ def main() -> None:
     parser.add_argument("-t", "--topic", required=True)
     parser.add_argument("-d", "--date", default=None, help="YYYY-MM override")
     parser.add_argument(
+        "-n", "--num-sessions", type=int, default=None, help="number of sessions"
+    )
+    parser.add_argument(
+        "--freq",
+        choices=["daily", "weekly"],
+        default=None,
+        help="session frequency (requires -n)",
+    )
+    parser.add_argument(
         "--notebook-type",
         choices=["jupyter", "marimo"],
         default=None,
     )
 
     args = parser.parse_args()
+
+    # Validate -n / --freq interaction
+    if args.freq is not None and args.num_sessions is None:
+        parser.error("--freq requires -n/--num-sessions")
 
     notebook_type: str = (
         args.notebook_type
@@ -104,7 +122,11 @@ def main() -> None:
     date_prefix = args.date if args.date else today.strftime("%Y-%m")
     repo_name = f"{args.client}-{args.topic}-{date_prefix}"
     destination = repo_name
-    notebook_base = f"{repo_name}-{today.strftime('%d')}"
+
+    # Determine notebook dates
+    num_sessions = args.num_sessions if args.num_sessions is not None else 1
+    freq = args.freq if args.freq is not None else "daily"
+    dates = _notebook_dates(today, num_sessions, freq)
 
     template_dir = _get_template_dir()
 
@@ -124,14 +146,18 @@ def main() -> None:
         else:
             shutil.copy2(source, str(readme_path))
 
-    # Handle notebook file
+    # Handle notebook files
     ipynb_path = Path(f"{destination}/Course notebook.ipynb")
-    if notebook_type == "jupyter":
-        os.rename(str(ipynb_path), f"{destination}/{notebook_base}.ipynb")
-    else:
-        ipynb_path.unlink()
-        py_path = Path(f"{destination}/{notebook_base}.py")
-        py_path.write_text(MARIMO_TEMPLATE)
+    ipynb_path.unlink()
+
+    for d in dates:
+        notebook_base = f"{repo_name}-{d.strftime('%m-%d')}"
+        if notebook_type == "jupyter":
+            Path(f"{destination}/{notebook_base}.ipynb").write_text(
+                '{"cells": [], "metadata": {}, "nbformat": 4, "nbformat_minor": 5}\n'
+            )
+        else:
+            Path(f"{destination}/{notebook_base}.py").write_text(MARIMO_TEMPLATE)
 
     # Write pyproject.toml
     pyproject_content = _build_pyproject_toml(repo_name, notebook_type)

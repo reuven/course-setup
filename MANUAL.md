@@ -136,7 +136,7 @@ precedence.
 #### Synopsis
 
 ```
-setup-course -c CLIENT -t TOPIC [-d YYYY-MM] [--notebook-type TYPE]
+setup-course -c CLIENT -t TOPIC [-d YYYY-MM] [-n NUM] [--freq daily|weekly] [--notebook-type TYPE]
 ```
 
 #### Options
@@ -146,6 +146,8 @@ setup-course -c CLIENT -t TOPIC [-d YYYY-MM] [--notebook-type TYPE]
 | `-c`, `--client` | Yes | The client or company name. |
 | `-t`, `--topic` | Yes | The course topic (e.g., `python-intro`, `pandas`). |
 | `-d`, `--date` | No | Override the year-month in `YYYY-MM` format. Defaults to the current month. |
+| `-n`, `--num-sessions` | No | Number of sessions. Creates one notebook per session. |
+| `--freq` | No | Session frequency: `daily` or `weekly`. Requires `-n`. Defaults to `daily` when `-n` is given. |
 | `--notebook-type` | No | `jupyter` or `marimo`. Overrides the default from your config file. |
 
 #### What it does
@@ -157,11 +159,11 @@ setup-course -c CLIENT -t TOPIC [-d YYYY-MM] [--notebook-type TYPE]
 2. **Copies the bundled course template** into a new directory in the current
    working directory.
 
-3. **Creates a notebook file** in the new directory:
-   - Jupyter: renames the template's `Course notebook.ipynb` to
-     `{client}-{topic}-{YYYY-MM-DD}.ipynb`, where DD is today's day.
-   - Marimo: deletes the `.ipynb` and writes a new `.py` file with a minimal
-     Marimo app scaffold, using the same naming scheme.
+3. **Creates notebook file(s)** in the new directory. Each notebook is named
+   `{client}-{topic}-{YYYY-MM}-{MM-DD}.ipynb` (or `.py` for Marimo), where
+   MM-DD is the session date. By default a single notebook is created for
+   today. With `-n`, multiple notebooks are created — one per session, with
+   dates advancing daily or weekly from today.
 
 4. **Generates a `pyproject.toml`** in the new directory with the repo name,
    a dependency on either `jupyter` or `marimo`, and `gitautopush`.
@@ -170,22 +172,47 @@ setup-course -c CLIENT -t TOPIC [-d YYYY-MM] [--notebook-type TYPE]
    the local `.git/config` with the correct SSH remote URL, using the
    authenticated user's GitHub username.
 
-#### Example
+#### Examples
+
+Single session (run on 2026-03-19):
 
 ```
 setup-course -c Acme -t python-intro
 ```
 
-Run on 2026-03-19, this creates:
+Creates:
 
 ```
 Acme-python-intro-2026-03/
   .git/
     config           # remote set to git@github.com:youruser/Acme-python-intro-2026-03.git
-  Acme-python-intro-2026-03-19.ipynb
+  Acme-python-intro-2026-03-03-19.ipynb
   pyproject.toml
   README.md
 ```
+
+Multi-day course (5 daily sessions starting March 17):
+
+```
+setup-course -c Acme -t python-intro -n 5
+```
+
+Creates 5 notebooks:
+`Acme-python-intro-2026-03-03-17.ipynb` through
+`Acme-python-intro-2026-03-03-21.ipynb`.
+
+Weekly course (5 weekly sessions starting March 3):
+
+```
+setup-course -c Acme -t python-intro -n 5 --freq weekly
+```
+
+Creates 5 notebooks:
+`Acme-python-intro-2026-03-03-03.ipynb`,
+`Acme-python-intro-2026-03-03-10.ipynb`,
+`Acme-python-intro-2026-03-03-17.ipynb`,
+`Acme-python-intro-2026-03-03-24.ipynb`,
+`Acme-python-intro-2026-03-03-31.ipynb`.
 
 With a date override:
 
@@ -194,7 +221,7 @@ setup-course -c Acme -t python-intro -d 2025-11
 ```
 
 Creates the directory `Acme-python-intro-2025-11/` with notebook
-`Acme-python-intro-2025-11-19.ipynb` (the day always comes from today).
+`Acme-python-intro-2025-11-03-19.ipynb` (the day always comes from today).
 
 With Marimo:
 
@@ -202,7 +229,7 @@ With Marimo:
 setup-course -c Acme -t python-intro --notebook-type marimo
 ```
 
-Creates `Acme-python-intro-2026-03-19.py` instead of the `.ipynb`.
+Creates `Acme-python-intro-2026-03-03-19.py` instead of the `.ipynb`.
 
 ---
 

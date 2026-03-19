@@ -73,12 +73,14 @@ Options:
 | `-c`, `--client` | Client name (required) |
 | `-t`, `--topic` | Course topic (required) |
 | `-d`, `--date` | YYYY-MM override (defaults to current month) |
+| `-n`, `--num-sessions` | Number of sessions (creates one notebook per session) |
+| `--freq` | Session frequency: `daily` or `weekly` (requires `-n`, defaults to `daily`) |
 | `--notebook-type` | `jupyter` or `marimo` (overrides config default) |
 
 This will:
 
 1. Copy the bundled course template to a new directory named `{client}-{topic}-{YYYY-MM}`
-2. Create a Jupyter notebook (`.ipynb`) or Marimo notebook (`.py`) named `{client}-{topic}-{YYYY-MM-DD}`, where the day is today's date
+2. Create one or more Jupyter notebooks (`.ipynb`) or Marimo notebooks (`.py`) named `{client}-{topic}-{YYYY-MM}-{MM-DD}` for each session date
 3. Generate a `pyproject.toml` with the appropriate notebook dependency and `gitautopush`
 4. Create a public GitHub repo and configure the local `.git/config` remote
 

@@ -9,7 +9,11 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from setup_course_github.setup_course import _get_template_dir, main
+from setup_course_github.setup_course import (
+    _get_template_dir,
+    _notebook_dates,
+    main,
+)
 
 FAKE_TODAY = datetime.date(2026, 3, 19)
 
@@ -115,9 +119,17 @@ def test_old_repo_flag_not_accepted(course_env: dict[str, Any]) -> None:
         main()
 
 
-def test_old_name_flag_not_accepted(course_env: dict[str, Any]) -> None:
-    """The removed -n flag is rejected."""
-    sys.argv = ["setup-course", "-c", "acme", "-t", "python", "-n", "extra"]
+def test_freq_without_n_is_error(course_env: dict[str, Any]) -> None:
+    """--freq without -n raises an error."""
+    sys.argv = [
+        "setup-course",
+        "-c",
+        "acme",
+        "-t",
+        "python",
+        "--freq",
+        "daily",
+    ]
     with pytest.raises(SystemExit):
         main()
 
@@ -157,21 +169,21 @@ def test_date_override_changes_repo_name(course_env: dict[str, Any]) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Notebook filename tests
+# Single notebook (default) tests
 # ---------------------------------------------------------------------------
 
 
 def test_jupyter_notebook_filename(course_env: dict[str, Any]) -> None:
-    """Jupyter notebook is named CLIENT-TOPIC-YYYY-MM-DD.ipynb."""
+    """Jupyter notebook is named REPO-MM-DD.ipynb."""
     sys.argv = ["setup-course", "-c", "acme", "-t", "python"]
     main()
     dest = course_env["tmp_path"] / "acme-python-2026-03"
-    assert (dest / "acme-python-2026-03-19.ipynb").exists()
+    assert (dest / "acme-python-2026-03-03-19.ipynb").exists()
     assert not (dest / "Course notebook.ipynb").exists()
 
 
 def test_marimo_notebook_filename(course_env: dict[str, Any]) -> None:
-    """Marimo notebook is named CLIENT-TOPIC-YYYY-MM-DD.py."""
+    """Marimo notebook is named REPO-MM-DD.py."""
     sys.argv = [
         "setup-course",
         "-c",
@@ -183,19 +195,175 @@ def test_marimo_notebook_filename(course_env: dict[str, Any]) -> None:
     ]
     main()
     dest = course_env["tmp_path"] / "acme-python-2026-03"
-    assert (dest / "acme-python-2026-03-19.py").exists()
+    assert (dest / "acme-python-2026-03-03-19.py").exists()
     assert not (dest / "Course notebook.ipynb").exists()
-    assert not (dest / "acme-python-2026-03-19.ipynb").exists()
+    assert not (dest / "acme-python-2026-03-03-19.ipynb").exists()
 
 
 def test_date_override_notebook_still_uses_todays_day(
     course_env: dict[str, Any],
 ) -> None:
-    """With -d override, notebook DD still comes from today."""
+    """With -d override, notebook MM-DD still comes from today."""
     sys.argv = ["setup-course", "-c", "acme", "-t", "python", "-d", "2025-11"]
     main()
     dest = course_env["tmp_path"] / "acme-python-2025-11"
-    assert (dest / "acme-python-2025-11-19.ipynb").exists()
+    assert (dest / "acme-python-2025-11-03-19.ipynb").exists()
+
+
+# ---------------------------------------------------------------------------
+# Multi-session tests (-n / --freq)
+# ---------------------------------------------------------------------------
+
+
+def test_n_daily_creates_sequential_notebooks(course_env: dict[str, Any]) -> None:
+    """'-n 5 --freq daily' creates 5 notebooks with consecutive dates."""
+    sys.argv = [
+        "setup-course",
+        "-c",
+        "acme",
+        "-t",
+        "python",
+        "-n",
+        "5",
+        "--freq",
+        "daily",
+    ]
+    main()
+    dest = course_env["tmp_path"] / "acme-python-2026-03"
+    assert (dest / "acme-python-2026-03-03-19.ipynb").exists()
+    assert (dest / "acme-python-2026-03-03-20.ipynb").exists()
+    assert (dest / "acme-python-2026-03-03-21.ipynb").exists()
+    assert (dest / "acme-python-2026-03-03-22.ipynb").exists()
+    assert (dest / "acme-python-2026-03-03-23.ipynb").exists()
+
+
+def test_n_weekly_creates_weekly_notebooks(course_env: dict[str, Any]) -> None:
+    """'-n 3 --freq weekly' creates 3 notebooks spaced a week apart."""
+    sys.argv = [
+        "setup-course",
+        "-c",
+        "acme",
+        "-t",
+        "python",
+        "-n",
+        "3",
+        "--freq",
+        "weekly",
+    ]
+    main()
+    dest = course_env["tmp_path"] / "acme-python-2026-03"
+    assert (dest / "acme-python-2026-03-03-19.ipynb").exists()
+    assert (dest / "acme-python-2026-03-03-26.ipynb").exists()
+    assert (dest / "acme-python-2026-03-04-02.ipynb").exists()
+
+
+def test_n_without_freq_defaults_to_daily(course_env: dict[str, Any]) -> None:
+    """'-n 3' without --freq defaults to daily."""
+    sys.argv = ["setup-course", "-c", "acme", "-t", "python", "-n", "3"]
+    main()
+    dest = course_env["tmp_path"] / "acme-python-2026-03"
+    assert (dest / "acme-python-2026-03-03-19.ipynb").exists()
+    assert (dest / "acme-python-2026-03-03-20.ipynb").exists()
+    assert (dest / "acme-python-2026-03-03-21.ipynb").exists()
+
+
+def test_n_1_creates_single_notebook(course_env: dict[str, Any]) -> None:
+    """'-n 1' creates exactly one notebook, same as no -n."""
+    sys.argv = ["setup-course", "-c", "acme", "-t", "python", "-n", "1"]
+    main()
+    dest = course_env["tmp_path"] / "acme-python-2026-03"
+    notebooks = list(dest.glob("*.ipynb"))
+    assert len(notebooks) == 1
+    assert notebooks[0].name == "acme-python-2026-03-03-19.ipynb"
+
+
+def test_n_daily_marimo_creates_py_files(course_env: dict[str, Any]) -> None:
+    """Multi-session with marimo creates .py files."""
+    sys.argv = [
+        "setup-course",
+        "-c",
+        "acme",
+        "-t",
+        "python",
+        "-n",
+        "2",
+        "--notebook-type",
+        "marimo",
+    ]
+    main()
+    dest = course_env["tmp_path"] / "acme-python-2026-03"
+    assert (dest / "acme-python-2026-03-03-19.py").exists()
+    assert (dest / "acme-python-2026-03-03-20.py").exists()
+    assert not list(dest.glob("*.ipynb"))
+
+
+def test_weekly_across_month_boundary(course_env: dict[str, Any]) -> None:
+    """Weekly sessions that cross a month boundary have correct dates."""
+    # FAKE_TODAY is March 19. 3 weeks: Mar 19, Mar 26, Apr 2
+    sys.argv = [
+        "setup-course",
+        "-c",
+        "acme",
+        "-t",
+        "python",
+        "-n",
+        "3",
+        "--freq",
+        "weekly",
+    ]
+    main()
+    dest = course_env["tmp_path"] / "acme-python-2026-03"
+    assert (dest / "acme-python-2026-03-03-19.ipynb").exists()
+    assert (dest / "acme-python-2026-03-03-26.ipynb").exists()
+    assert (dest / "acme-python-2026-03-04-02.ipynb").exists()
+
+
+def test_template_notebook_removed_with_multi_session(
+    course_env: dict[str, Any],
+) -> None:
+    """The template 'Course notebook.ipynb' is always removed."""
+    sys.argv = ["setup-course", "-c", "acme", "-t", "python", "-n", "3"]
+    main()
+    dest = course_env["tmp_path"] / "acme-python-2026-03"
+    assert not (dest / "Course notebook.ipynb").exists()
+
+
+# ---------------------------------------------------------------------------
+# _notebook_dates helper tests
+# ---------------------------------------------------------------------------
+
+
+def test_notebook_dates_daily() -> None:
+    """_notebook_dates returns consecutive dates for daily freq."""
+    start = datetime.date(2026, 3, 17)
+    result = _notebook_dates(start, 5, "daily")
+    assert result == [
+        datetime.date(2026, 3, 17),
+        datetime.date(2026, 3, 18),
+        datetime.date(2026, 3, 19),
+        datetime.date(2026, 3, 20),
+        datetime.date(2026, 3, 21),
+    ]
+
+
+def test_notebook_dates_weekly() -> None:
+    """_notebook_dates returns weekly-spaced dates."""
+    start = datetime.date(2026, 3, 3)
+    result = _notebook_dates(start, 5, "weekly")
+    assert result == [
+        datetime.date(2026, 3, 3),
+        datetime.date(2026, 3, 10),
+        datetime.date(2026, 3, 17),
+        datetime.date(2026, 3, 24),
+        datetime.date(2026, 3, 31),
+    ]
+
+
+def test_notebook_dates_single() -> None:
+    """_notebook_dates with count=1 returns a single date."""
+    start = datetime.date(2026, 3, 19)
+    result = _notebook_dates(start, 1, "daily")
+    assert result == [datetime.date(2026, 3, 19)]
 
 
 # ---------------------------------------------------------------------------
@@ -342,8 +510,8 @@ def test_notebook_type_flag_overrides_config(course_env: dict[str, Any]) -> None
     ]
     main()
     dest = course_env["tmp_path"] / "acme-python-2026-03"
-    assert (dest / "acme-python-2026-03-19.py").exists()
-    assert not (dest / "acme-python-2026-03-19.ipynb").exists()
+    assert (dest / "acme-python-2026-03-03-19.py").exists()
+    assert not (dest / "acme-python-2026-03-03-19.ipynb").exists()
 
 
 def test_default_notebook_type_from_config_marimo(
@@ -354,8 +522,8 @@ def test_default_notebook_type_from_config_marimo(
     sys.argv = ["setup-course", "-c", "acme", "-t", "python"]
     main()
     dest = course_env["tmp_path"] / "acme-python-2026-03"
-    assert (dest / "acme-python-2026-03-19.py").exists()
-    assert not (dest / "acme-python-2026-03-19.ipynb").exists()
+    assert (dest / "acme-python-2026-03-03-19.py").exists()
+    assert not (dest / "acme-python-2026-03-03-19.ipynb").exists()
 
 
 def test_default_notebook_type_from_config_jupyter(
@@ -366,8 +534,8 @@ def test_default_notebook_type_from_config_jupyter(
     sys.argv = ["setup-course", "-c", "acme", "-t", "python"]
     main()
     dest = course_env["tmp_path"] / "acme-python-2026-03"
-    assert (dest / "acme-python-2026-03-19.ipynb").exists()
-    assert not (dest / "acme-python-2026-03-19.py").exists()
+    assert (dest / "acme-python-2026-03-03-19.ipynb").exists()
+    assert not (dest / "acme-python-2026-03-03-19.py").exists()
 
 
 # ---------------------------------------------------------------------------
@@ -388,7 +556,7 @@ def test_marimo_notebook_content(course_env: dict[str, Any]) -> None:
     ]
     main()
     dest = course_env["tmp_path"] / "acme-python-2026-03"
-    content = (dest / "acme-python-2026-03-19.py").read_text()
+    content = (dest / "acme-python-2026-03-03-19.py").read_text()
     assert "import marimo" in content
     assert "__generated_with" in content
     assert "app = marimo.App()" in content
