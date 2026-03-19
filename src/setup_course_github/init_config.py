@@ -35,6 +35,12 @@ notebook_type = "jupyter"
 # Can be overridden with -v / --verbose on the command line.
 # verbose = false
 
+# Default dependency group to include when --extras is not specified.
+# Can be a built-in group (python, data, viz, geo, db, ml) or a custom
+# group defined in [extras] below.
+# Example: extras_group = "python"
+# extras_group = ""
+
 # [extras]
 # Define custom dependency groups for --extras.
 # These merge with built-in groups (python, data, viz, geo, db, ml).
