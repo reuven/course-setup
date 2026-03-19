@@ -185,6 +185,12 @@ def main() -> None:
         default=None,
         help="show detailed output for each step",
     )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        default=False,
+        help="show what would be done without making any changes",
+    )
 
     args = parser.parse_args()
 
@@ -230,6 +236,24 @@ def main() -> None:
     dates = _notebook_dates(today, num_sessions, freq)
 
     template_dir = _get_template_dir()
+
+    # Dry-run: print summary and exit without side effects
+    if args.dry_run:
+        ext = ".ipynb" if notebook_type == "jupyter" else ".py"
+        notebook_filenames = [
+            f"{args.client}-{args.topic}-{d.strftime('%Y-%m-%d')}{ext}" for d in dates
+        ]
+        _print_status("[dry-run] Would create the following:")
+        _print_status(f"  Repository: {repo_name}")
+        _print_status(f"  Directory: {destination}")
+        _print_status(f"  Notebook type: {notebook_type}")
+        _print_status(f"  Notebooks: {', '.join(notebook_filenames)}")
+        deps = ["jupyter" if notebook_type == "jupyter" else "marimo", "gitautopush"]
+        if extra_packages:
+            deps.extend(extra_packages)
+        _print_status(f"  Dependencies: {', '.join(deps)}")
+        _print_status(f"  GitHub repo: <your-github-username>/{repo_name}")
+        return
 
     _print_status("Creating course directory...")
     _print_verbose(f"  Template: {template_dir}", verbose)
