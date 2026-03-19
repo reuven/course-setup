@@ -21,11 +21,14 @@ from setup_course_github.setup_course import (
 FAKE_TODAY = datetime.date(2026, 3, 19)
 
 
-def _fake_git_init(*args: Any, **kwargs: Any) -> None:
-    """Simulate git init by creating the .git directory."""
+def _fake_subprocess(*args: Any, **kwargs: Any) -> Any:
+    """Simulate subprocess.run for git and uv commands."""
+    cmd = args[0] if args else kwargs.get("args", [])
     cwd = kwargs.get("cwd")
-    if cwd is not None:
+    if cmd == ["git", "init"] and cwd is not None:
         (Path(cwd) / ".git").mkdir(exist_ok=True)
+    # All other commands (git add, git commit, git push, uv sync) are no-ops
+    return MagicMock(returncode=0)
 
 
 def make_mock_config(
@@ -76,7 +79,7 @@ def course_env(tmp_path: Path) -> Generator[dict[str, Any], None, None]:
         ),
         patch(
             "setup_course_github.setup_course.subprocess.run",
-            side_effect=_fake_git_init,
+            side_effect=_fake_subprocess,
         ) as mock_run,
         patch(
             "setup_course_github.setup_course._today",
@@ -378,9 +381,10 @@ def test_template_copied_and_git_init_called(course_env: dict[str, Any]) -> None
     """git init is called in the destination directory."""
     sys.argv = ["setup-course", "-c", "acme", "-t", "python"]
     main()
-    course_env["mock_run"].assert_called_once_with(
-        ["git", "init"], cwd="acme-python-2026-03", check=True
-    )
+    calls = course_env["mock_run"].call_args_list
+    git_init_calls = [c for c in calls if c[0][0] == ["git", "init"]]
+    assert len(git_init_calls) == 1
+    assert git_init_calls[0][1]["cwd"] == "acme-python-2026-03"
 
 
 # ---------------------------------------------------------------------------
@@ -981,3 +985,61 @@ def test_no_extras_flag_produces_only_base_deps(course_env: dict[str, Any]) -> N
         data = tomllib.load(f)
     deps = data["project"]["dependencies"]
     assert deps == ["jupyter", "gitautopush"]
+
+
+# ---------------------------------------------------------------------------
+# Initial git commit/push and uv sync tests
+# ---------------------------------------------------------------------------
+
+
+def test_git_add_called_after_setup(course_env: dict[str, Any]) -> None:
+    """git add . is called in the course directory."""
+    sys.argv = ["setup-course", "-c", "acme", "-t", "python"]
+    main()
+    calls = course_env["mock_run"].call_args_list
+    git_add_calls = [c for c in calls if c[0][0] == ["git", "add", "."]]
+    assert len(git_add_calls) == 1
+    assert git_add_calls[0][1]["cwd"] == "acme-python-2026-03"
+
+
+def test_git_commit_called_after_setup(course_env: dict[str, Any]) -> None:
+    """git commit is called in the course directory."""
+    sys.argv = ["setup-course", "-c", "acme", "-t", "python"]
+    main()
+    calls = course_env["mock_run"].call_args_list
+    git_commit_calls = [c for c in calls if c[0][0][:2] == ["git", "commit"]]
+    assert len(git_commit_calls) == 1
+    assert git_commit_calls[0][1]["cwd"] == "acme-python-2026-03"
+
+
+def test_git_push_called_after_setup(course_env: dict[str, Any]) -> None:
+    """git push is called in the course directory."""
+    sys.argv = ["setup-course", "-c", "acme", "-t", "python"]
+    main()
+    calls = course_env["mock_run"].call_args_list
+    git_push_calls = [c for c in calls if c[0][0][:2] == ["git", "push"]]
+    assert len(git_push_calls) == 1
+    assert git_push_calls[0][1]["cwd"] == "acme-python-2026-03"
+
+
+def test_uv_sync_called_after_setup(course_env: dict[str, Any]) -> None:
+    """uv sync is called in the course directory."""
+    sys.argv = ["setup-course", "-c", "acme", "-t", "python"]
+    main()
+    calls = course_env["mock_run"].call_args_list
+    uv_sync_calls = [c for c in calls if c[0][0] == ["uv", "sync"]]
+    assert len(uv_sync_calls) == 1
+    assert uv_sync_calls[0][1]["cwd"] == "acme-python-2026-03"
+
+
+def test_subprocess_call_order(course_env: dict[str, Any]) -> None:
+    """Subprocess calls happen in correct order."""
+    sys.argv = ["setup-course", "-c", "acme", "-t", "python"]
+    main()
+    calls = course_env["mock_run"].call_args_list
+    cmds = [c[0][0] for c in calls]
+    assert cmds[0] == ["git", "init"]
+    assert cmds[1] == ["git", "add", "."]
+    assert cmds[2][:2] == ["git", "commit"]
+    assert cmds[3][:2] == ["git", "push"]
+    assert cmds[4] == ["uv", "sync"]
