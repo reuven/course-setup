@@ -30,6 +30,14 @@ archive = "/path/to/your/archive"
 # Default notebook type when running setup-course.
 # Options: "jupyter" or "marimo"
 notebook_type = "jupyter"
+
+# [extras]
+# Define custom dependency groups for --extras.
+# These merge with built-in groups (python, data, viz, geo, db, ml).
+# A custom group with the same name as a built-in group overrides it.
+# Example:
+# finance = ["yfinance", "pandas-datareader"]
+# nlp = ["spacy", "nltk"]
 """
 
 
