@@ -123,6 +123,50 @@ def _notebook_dates(start: datetime.date, count: int, freq: str) -> list[datetim
     return [start + step * i for i in range(count)]
 
 
+def _resolve_group(
+    group_name: str,
+    all_groups: dict[str, list[str]],
+    _expanding: set[str] | None = None,
+) -> tuple[list[str], set[str]]:
+    """Resolve a group into (flat_packages, referenced_group_names).
+
+    Each entry in a group's list is checked: if it's a key in *all_groups*,
+    it is recursively expanded.  Otherwise it is treated as a literal package
+    name.  Raises ``ValueError`` on circular references.
+    """
+    if _expanding is None:
+        _expanding = set()
+
+    if group_name in _expanding:
+        raise ValueError(
+            f"Circular extras-group reference: "
+            f"{' -> '.join(_expanding)} -> {group_name}"
+        )
+
+    _expanding = _expanding | {group_name}
+    expanded_groups: set[str] = {group_name}
+
+    seen: set[str] = set()
+    flat: list[str] = []
+
+    for entry in all_groups.get(group_name, []):
+        if entry in all_groups:
+            # It's a group reference – recurse
+            sub_pkgs, sub_groups = _resolve_group(entry, all_groups, _expanding)
+            expanded_groups |= sub_groups
+            for pkg in sub_pkgs:
+                if pkg not in seen:
+                    seen.add(pkg)
+                    flat.append(pkg)
+        else:
+            # Literal package name
+            if entry not in seen:
+                seen.add(entry)
+                flat.append(entry)
+
+    return flat, expanded_groups
+
+
 def _build_import_lines(groups: list[str]) -> str:
     """Collect import statements for the given extras groups, deduplicated."""
     seen: set[str] = set()
@@ -216,11 +260,14 @@ def main() -> None:
 
     # Resolve extras groups into a flat sorted+deduped list
     extra_packages: list[str] | None = None
+    all_expanded_groups: set[str] = set()
     if effective_extras:
         seen: set[str] = set()
         flat: list[str] = []
         for group in effective_extras:
-            for pkg in extras_groups[group]:
+            pkgs, expanded = _resolve_group(group, extras_groups)
+            all_expanded_groups |= expanded
+            for pkg in pkgs:
                 if pkg not in seen:
                     seen.add(pkg)
                     flat.append(pkg)
@@ -293,7 +340,7 @@ def main() -> None:
 
         import_code = ""
         if args.add_imports and effective_extras:
-            import_code = _build_import_lines(effective_extras)
+            import_code = _build_import_lines(sorted(all_expanded_groups))
 
         for d in dates:
             notebook_base = f"{args.client}-{args.topic}-{d.strftime('%Y-%m-%d')}"
