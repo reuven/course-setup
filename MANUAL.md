@@ -130,6 +130,7 @@ Fill in each section:
 | `[paths] archive` | Yes | Absolute path to the directory where retired courses are stored. |
 | `[paths] readme_source` | No | Path or URL to a custom README.md. When set, `setup-course` uses this instead of the bundled default. Can be a local file path or an `https://` URL. |
 | `[defaults] notebook_type` | No | `"jupyter"` (default) or `"marimo"`. Controls which kind of notebook file `setup-course` creates. |
+| `[extras] <name>` | No | Custom dependency groups for `--extras`. Each key is a group name, each value is a list of package names. |
 
 *You can omit the token from the config file and set the `GITHUB_TOKEN`
 environment variable instead. If both are set, the config file value takes
@@ -144,7 +145,7 @@ precedence.
 #### Synopsis
 
 ```
-setup-course -c CLIENT -t TOPIC [-d YYYY-MM] [-n NUM] [--freq daily|weekly] [--notebook-type TYPE] [--extras GROUP ...]
+setup-course -c CLIENT -t TOPIC [-d YYYY-MM] [-n NUM] [--freq daily|weekly] [--notebook-type TYPE] [--extras GROUP ...] [--add-imports]
 ```
 
 #### Options
@@ -158,6 +159,7 @@ setup-course -c CLIENT -t TOPIC [-d YYYY-MM] [-n NUM] [--freq daily|weekly] [--n
 | `--freq` | No | Session frequency: `daily` or `weekly`. Requires `-n`. Defaults to `daily` when `-n` is given. |
 | `--notebook-type` | No | `jupyter` or `marimo`. Overrides the default from your config file. |
 | `--extras` | No | One or more dependency groups to add to the course `pyproject.toml`. See [Dependency groups](#dependency-groups) below. |
+| `--add-imports` | No | Pre-populate each notebook with import statements matching the `--extras` groups. Has no effect without `--extras`. |
 
 #### Dependency groups
 
@@ -183,6 +185,20 @@ setup-course -c Acme -t ml-intro --extras python data ml
 
 Duplicate packages across groups are automatically deduplicated and sorted.
 
+##### Custom groups
+
+You can define additional groups (or override built-in ones) in your
+`config.toml`:
+
+```toml
+[extras]
+finance = ["yfinance", "pandas-datareader"]
+nlp = ["spacy", "nltk"]
+```
+
+Custom groups are merged with the built-in groups. If a custom group has the
+same name as a built-in group, the custom definition takes precedence.
+
 #### What it does
 
 1. **Auto-generates a repo name** from the client, topic, and date:
@@ -205,6 +221,12 @@ Duplicate packages across groups are automatically deduplicated and sorted.
 5. **Creates a public GitHub repository** using the GitHub API and configures
    the local `.git/config` with the correct SSH remote URL, using the
    authenticated user's GitHub username.
+
+6. **Makes an initial commit and pushes** to GitHub, so the repo is ready for
+   `gitautopush` immediately.
+
+7. **Runs `uv sync`** in the course directory to install all dependencies, so
+   you can start Jupyter or Marimo right away.
 
 #### Examples
 
@@ -266,6 +288,15 @@ setup-course -c Acme -t pandas --extras python data
 Creates the course with ipython, numpy, pandas, xlrd, openpyxl, and plotly
 added to the `pyproject.toml` dependencies alongside jupyter and gitautopush.
 
+With pre-populated imports:
+
+```
+setup-course -c Acme -t pandas --extras python data --add-imports
+```
+
+Same as above, but each notebook starts with a code cell containing:
+`import numpy as np`, `import pandas as pd`, `import plotly.express as px`.
+
 With Marimo:
 
 ```
@@ -281,16 +312,18 @@ Creates `Acme-python-intro-2026-03-19.py` instead of the `.ipynb`.
 #### Synopsis
 
 ```
-retire-course DIRNAME
+retire-course DIRNAME [DIRNAME ...]
 ```
 
 #### Arguments
 
 | Argument | Required | Description |
 |----------|----------|-------------|
-| `DIRNAME` | Yes | Path to the course directory to retire. |
+| `DIRNAME...` | Yes | One or more paths to course directories to retire. |
 
 #### What it does
+
+For each directory:
 
 1. **Reads the Git remote URL** from the course directory's `.git/config`.
 2. **Makes the GitHub repository private** via the GitHub API.
@@ -298,10 +331,21 @@ retire-course DIRNAME
    `archive_path` is the value from your config file and `current_year` is the
    four-digit year (e.g., `2026`).
 
-#### Example
+If any directory fails, the remaining directories are still processed and all
+errors are reported at the end.
+
+#### Examples
+
+Single course:
 
 ```
 retire-course ./Acme-2026-03-18
+```
+
+Multiple courses at once:
+
+```
+retire-course ./Acme-2026-03 ./Beta-2026-03 ./Gamma-2026-02
 ```
 
 If your archive path is `/Users/reuven/Courses/Archive`, this moves the

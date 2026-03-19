@@ -68,6 +68,7 @@ setup-course -c Acme -t python-intro
 | `--freq` | Session frequency: `daily` or `weekly` (requires `-n`, defaults to `daily`) |
 | `--notebook-type` | `jupyter` or `marimo` (overrides config default) |
 | `--extras` | Dependency groups to add to the course `pyproject.toml` (see below) |
+| `--add-imports` | Pre-populate notebooks with import statements from `--extras` groups |
 
 #### Dependency groups
 
@@ -79,6 +80,13 @@ setup-course -c Acme -t python-intro
 | `geo` | geopandas, folium, shapely |
 | `db` | duckdb, sqlalchemy |
 | `ml` | scikit-learn |
+
+You can also define custom groups in your `config.toml` under `[extras]`:
+
+```toml
+[extras]
+finance = ["yfinance", "pandas-datareader"]
+```
 
 Example — a Pandas course with Python extras and data/viz packages:
 
@@ -93,6 +101,8 @@ This will:
    (`.ipynb` for Jupyter, `.py` for Marimo)
 3. Generate a `pyproject.toml` with the notebook dependency and `gitautopush`
 4. Configure the local `.git/config` with the GitHub SSH remote
+5. Make an initial commit and push to GitHub
+6. Run `uv sync` to install all dependencies
 
 By default, a single notebook is created for today's date. Use `-n` to
 create multiple notebooks for multi-day or multi-week courses:
@@ -110,12 +120,20 @@ retire-course ./Acme-python-intro-2026-03
 
 | Argument | Description |
 |----------|-------------|
-| `DIRNAME` | Path to the course directory to retire |
+| `DIRNAME...` | One or more course directories to retire |
 
-This will:
+This will (for each directory):
 
 1. Make the GitHub repo private
 2. Move the local directory to your configured archive path under the current year
+
+You can retire multiple courses at once:
+
+```bash
+retire-course ./Acme-2026-03 ./Beta-2026-03 ./Gamma-2026-02
+```
+
+If any directory fails, the rest are still processed and errors are reported at the end.
 
 ### Live teaching with `gitautopush`
 
