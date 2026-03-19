@@ -215,6 +215,22 @@ def main() -> None:
     # Create the repo on GitHub
     user.create_repo(name=repo_name, private=False)
 
+    # Initial commit and push
+    subprocess.run(["git", "add", "."], cwd=destination, check=True)
+    subprocess.run(
+        ["git", "commit", "-m", "Initial commit"],
+        cwd=destination,
+        check=True,
+    )
+    subprocess.run(
+        ["git", "push", "-u", "origin", "main"],
+        cwd=destination,
+        check=True,
+    )
+
+    # Install dependencies
+    subprocess.run(["uv", "sync"], cwd=destination, check=True)
+
 
 if __name__ == "__main__":  # pragma: no cover
     main()
