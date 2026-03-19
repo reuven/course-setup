@@ -330,6 +330,33 @@ retire-course ./Acme-python-intro-2026-03
 
 ---
 
+## Live teaching with gitautopush
+
+Every course created by `setup-course` includes `gitautopush` as a dependency
+in its `pyproject.toml`. During a live teaching session you can use it to
+automatically push your notebook changes to GitHub so that students can follow
+along from their own computers.
+
+### Steps
+
+1. Run `setup-course` as usual and start your Jupyter or Marimo session.
+2. Open a **separate terminal window**.
+3. `cd` into the course directory (e.g., `cd Acme-python-intro-2026-03`).
+4. Run:
+
+   ```
+   uv run gitautopush .
+   ```
+
+5. `gitautopush` watches the directory for changes and pushes updated files to
+   GitHub every few minutes.
+6. Students can view the **public GitHub repository** from their own computers
+   to get a read-only, auto-updating copy of the notebook.
+7. Keep `gitautopush` running for the entire duration of the teaching session.
+   When you are done, press `Ctrl-C` to stop it.
+
+---
+
 ## Troubleshooting
 
 | Problem | Solution |

@@ -99,6 +99,12 @@ This will:
 1. Make the GitHub repo private
 2. Move the local directory to your configured archive path under the current year
 
+### Live teaching with `gitautopush`
+
+In a separate terminal, run `uv run gitautopush .` from inside the course
+directory. This watches for notebook changes and automatically pushes them to
+GitHub, so students can follow along in real time by viewing the public repo.
+
 ## Development
 
 ```bash
