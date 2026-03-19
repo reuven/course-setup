@@ -19,6 +19,7 @@ from setup_course_github.setup_course import (
     _notebook_dates,
     _print_status,
     _print_verbose,
+    _resolve_group,
     main,
 )
 
@@ -1104,6 +1105,129 @@ def test_custom_and_builtin_groups_together(course_env: dict[str, Any]) -> None:
     content = (dest / "pyproject.toml").read_text()
     assert '"ipython"' in content
     assert '"yfinance"' in content
+
+
+# ---------------------------------------------------------------------------
+# _resolve_group tests (group references in custom extras)
+# ---------------------------------------------------------------------------
+
+
+def test_resolve_group_plain_packages() -> None:
+    """A group with only plain packages returns them unchanged."""
+    groups = {**EXTRAS_GROUPS, "finance": ["yfinance", "pandas-datareader"]}
+    pkgs, expanded = _resolve_group("finance", groups)
+    assert pkgs == ["yfinance", "pandas-datareader"]
+    assert expanded == {"finance"}
+
+
+def test_resolve_group_references_builtin() -> None:
+    """A group referencing built-in groups expands them."""
+    groups = {**EXTRAS_GROUPS, "reuven": ["python", "data", "plotly"]}
+    pkgs, expanded = _resolve_group("reuven", groups)
+    # Should contain packages from python group, data group, and literal plotly
+    assert "ipython" in pkgs
+    assert "numpy" in pkgs
+    assert "pandas" in pkgs
+    assert "plotly" in pkgs
+    # Should NOT contain the group names as literal packages
+    assert "python" not in pkgs
+    assert "data" not in pkgs
+    assert {"reuven", "python", "data"} == expanded
+
+
+def test_resolve_group_references_custom_group() -> None:
+    """A custom group can reference another custom group."""
+    groups = {
+        **EXTRAS_GROUPS,
+        "base": ["ipython", "rich"],
+        "full": ["base", "matplotlib"],
+    }
+    pkgs, expanded = _resolve_group("full", groups)
+    assert "ipython" in pkgs
+    assert "rich" in pkgs
+    assert "matplotlib" in pkgs
+    assert "base" not in pkgs
+    assert {"full", "base"} == expanded
+
+
+def test_resolve_group_circular_reference_raises() -> None:
+    """Circular group references raise ValueError."""
+    groups = {**EXTRAS_GROUPS, "a": ["b"], "b": ["a"]}
+    with pytest.raises(ValueError, match="[Cc]ircular"):
+        _resolve_group("a", groups)
+
+
+def test_resolve_group_deduplicates() -> None:
+    """Packages appearing in multiple referenced groups are deduplicated."""
+    groups = {**EXTRAS_GROUPS, "combo": ["data", "numpy"]}
+    pkgs, _ = _resolve_group("combo", groups)
+    assert pkgs.count("numpy") == 1
+
+
+def test_custom_extras_group_references_builtin_e2e(
+    course_env: dict[str, Any],
+) -> None:
+    """Custom group referencing built-in groups expands packages in pyproject.toml."""
+    course_env["config"].custom_extras = {"reuven": ["python", "data", "plotly"]}
+    sys.argv = [
+        "setup-course",
+        "-c",
+        "acme",
+        "-t",
+        "python",
+        "--extras",
+        "reuven",
+    ]
+    main()
+    dest = course_env["tmp_path"] / "acme-python-2026-03"
+    content = (dest / "pyproject.toml").read_text()
+    # Packages from "python" group
+    assert '"ipython"' in content
+    # Packages from "data" group
+    assert '"numpy"' in content
+    assert '"pandas"' in content
+    # Literal package
+    assert '"plotly"' in content
+    # Group names must NOT appear as packages
+    assert '"python"' not in content
+    assert '"data"' not in content
+
+
+def test_custom_extras_group_ref_imports_included(
+    course_env: dict[str, Any],
+) -> None:
+    """Imports from referenced built-in groups are included with --add-imports."""
+    course_env["config"].custom_extras = {"reuven": ["data", "plotly"]}
+    sys.argv = [
+        "setup-course",
+        "-c",
+        "acme",
+        "-t",
+        "python",
+        "--extras",
+        "reuven",
+        "--add-imports",
+    ]
+    main()
+    dest = course_env["tmp_path"] / "acme-python-2026-03"
+    nb_path = dest / "acme-python-2026-03-19.ipynb"
+    import json as json_mod
+
+    nb = json_mod.loads(nb_path.read_text())
+    source = "".join(nb["cells"][0]["source"])
+    assert "import numpy as np" in source
+    assert "import pandas as pd" in source
+
+
+def test_custom_extras_override_still_works(course_env: dict[str, Any]) -> None:
+    """Custom group overriding built-in still works (no recursive expansion)."""
+    course_env["config"].custom_extras = {"data": ["polars"]}
+    sys.argv = ["setup-course", "-c", "acme", "-t", "python", "--extras", "data"]
+    main()
+    dest = course_env["tmp_path"] / "acme-python-2026-03"
+    content = (dest / "pyproject.toml").read_text()
+    assert '"polars"' in content
+    assert '"numpy"' not in content
 
 
 # ---------------------------------------------------------------------------
