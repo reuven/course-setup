@@ -138,6 +138,12 @@ def _print_status(msg: str) -> None:
     print(msg)
 
 
+def _print_verbose(msg: str, verbose: bool) -> None:
+    """Print a message only when verbose mode is enabled."""
+    if verbose:
+        print(msg)
+
+
 def main() -> None:
     config = load_config()
     extras_groups = {**EXTRAS_GROUPS, **config.custom_extras}
@@ -172,8 +178,18 @@ def main() -> None:
         default=False,
         help="pre-populate notebooks with import statements from --extras groups",
     )
+    parser.add_argument(
+        "-v",
+        "--verbose",
+        action="store_true",
+        default=None,
+        help="show detailed output for each step",
+    )
 
     args = parser.parse_args()
+
+    # Resolve verbose: CLI flag overrides config default
+    verbose: bool = args.verbose if args.verbose is not None else config.default_verbose
 
     # Validate -n / --freq interaction
     if args.freq is not None and args.num_sessions is None:
@@ -216,6 +232,8 @@ def main() -> None:
     template_dir = _get_template_dir()
 
     _print_status("Creating course directory...")
+    _print_verbose(f"  Template: {template_dir}", verbose)
+    _print_verbose(f"  Destination: {destination}", verbose)
     shutil.copytree(str(template_dir), destination)
 
     _print_status("Initializing git repository...")
@@ -226,6 +244,7 @@ def main() -> None:
         _print_status("Setting up README...")
         readme_path = Path(f"{destination}/README.md")
         source = config.readme_source
+        _print_verbose(f"  README source: {source}", verbose)
         if source.startswith(("http://", "https://")):
             with urllib.request.urlopen(source) as response:
                 readme_path.write_text(response.read().decode("utf-8"))
@@ -243,6 +262,8 @@ def main() -> None:
 
     for d in dates:
         notebook_base = f"{args.client}-{args.topic}-{d.strftime('%Y-%m-%d')}"
+        ext = ".ipynb" if notebook_type == "jupyter" else ".py"
+        _print_verbose(f"  {notebook_base}{ext}", verbose)
         if notebook_type == "jupyter":
             if import_code:
                 cell: dict[str, object] = {
@@ -293,6 +314,8 @@ if __name__ == "__main__":
     # Write pyproject.toml
     _print_status("Writing project configuration...")
     pyproject_content = _build_pyproject_toml(repo_name, notebook_type, extra_packages)
+    if extra_packages:
+        _print_verbose(f"  Dependencies: {', '.join(extra_packages)}", verbose)
     Path(f"{destination}/pyproject.toml").write_text(pyproject_content)
 
     # Authenticate with GitHub API
@@ -301,6 +324,8 @@ if __name__ == "__main__":
     user = cast(AuthenticatedUser, github.get_user())
 
     # Write git remote config using API username
+    _print_verbose(f"  GitHub user: {user.login}", verbose)
+    _print_verbose(f"  Repo: {repo_name}", verbose)
     git_config_content = _build_git_config(user.login, repo_name)
     with open(f"{destination}/.git/config", "w") as outfile:
         outfile.write(git_config_content)
@@ -310,6 +335,8 @@ if __name__ == "__main__":
 
     # Initial commit and push
     _print_status("Pushing to GitHub...")
+    remote_url = f"git@github.com:{user.login}/{repo_name}.git"
+    _print_verbose(f"  Remote: {remote_url}", verbose)
     subprocess.run(["git", "add", "."], cwd=destination, check=True)
     subprocess.run(
         ["git", "commit", "-m", "Initial commit"],
