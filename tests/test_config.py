@@ -295,3 +295,54 @@ def test_custom_extras_invalid_type_raises(tmp_path: Path) -> None:
     config_file.write_text(INVALID_EXTRAS_TOML)
     with pytest.raises(ConfigError, match="extras.bad_group"):
         load_config(config_file)
+
+
+# ---------------------------------------------------------------------------
+# Default verbose tests
+# ---------------------------------------------------------------------------
+
+VERBOSE_TRUE_TOML = """
+[github]
+token = "ghp_testtoken"
+
+[paths]
+archive = "/tmp/archive"
+
+[defaults]
+verbose = true
+"""
+
+VERBOSE_INVALID_TOML = """
+[github]
+token = "ghp_testtoken"
+
+[paths]
+archive = "/tmp/archive"
+
+[defaults]
+verbose = "yes"
+"""
+
+
+def test_default_verbose_defaults_to_false(tmp_path: Path) -> None:
+    """When verbose is not in config, it defaults to False."""
+    config_file = tmp_path / "config.toml"
+    config_file.write_text(MINIMAL_TOML)
+    config = load_config(config_file)
+    assert config.default_verbose is False
+
+
+def test_default_verbose_true(tmp_path: Path) -> None:
+    """verbose = true in config sets default_verbose to True."""
+    config_file = tmp_path / "config.toml"
+    config_file.write_text(VERBOSE_TRUE_TOML)
+    config = load_config(config_file)
+    assert config.default_verbose is True
+
+
+def test_default_verbose_invalid_type_raises(tmp_path: Path) -> None:
+    """Non-boolean verbose value raises ConfigError."""
+    config_file = tmp_path / "config.toml"
+    config_file.write_text(VERBOSE_INVALID_TOML)
+    with pytest.raises(ConfigError, match="verbose"):
+        load_config(config_file)
