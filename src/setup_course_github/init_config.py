@@ -31,6 +31,10 @@ archive = "/path/to/your/archive"
 # Options: "jupyter" or "marimo"
 notebook_type = "jupyter"
 
+# Whether to show verbose output by default.
+# Can be overridden with -v / --verbose on the command line.
+# verbose = false
+
 # [extras]
 # Define custom dependency groups for --extras.
 # These merge with built-in groups (python, data, viz, geo, db, ml).
