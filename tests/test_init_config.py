@@ -105,3 +105,10 @@ def test_main_exits_if_exists_no_force(tmp_path: Path) -> None:
         with pytest.raises(SystemExit) as exc_info:
             main([])
     assert exc_info.value.code != 0
+
+
+def test_config_contains_extras_section(tmp_path: Path) -> None:
+    config_file = tmp_path / "config.toml"
+    create_config(config_file)
+    content = config_file.read_text()
+    assert "extras" in content.lower()

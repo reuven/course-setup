@@ -37,6 +37,7 @@ def make_mock_config(
     config.github_token = "ghp_testtoken"
     config.default_notebook_type = default_notebook_type
     config.readme_source = readme_source
+    config.custom_extras = {}
     return config
 
 
@@ -981,3 +982,58 @@ def test_no_extras_flag_produces_only_base_deps(course_env: dict[str, Any]) -> N
         data = tomllib.load(f)
     deps = data["project"]["dependencies"]
     assert deps == ["jupyter", "gitautopush"]
+
+
+# ---------------------------------------------------------------------------
+# Custom extras tests
+# ---------------------------------------------------------------------------
+
+
+def test_custom_extras_group_accepted(course_env: dict[str, Any]) -> None:
+    """A custom extras group defined in config is accepted by --extras."""
+    course_env["config"].custom_extras = {"finance": ["yfinance", "pandas-datareader"]}
+    sys.argv = ["setup-course", "-c", "acme", "-t", "python", "--extras", "finance"]
+    main()
+    dest = course_env["tmp_path"] / "acme-python-2026-03"
+    content = (dest / "pyproject.toml").read_text()
+    assert '"yfinance"' in content
+    assert '"pandas-datareader"' in content
+
+
+def test_custom_extras_override_builtin(course_env: dict[str, Any]) -> None:
+    """Custom group with same name as built-in overrides it."""
+    course_env["config"].custom_extras = {"data": ["polars"]}
+    sys.argv = ["setup-course", "-c", "acme", "-t", "python", "--extras", "data"]
+    main()
+    dest = course_env["tmp_path"] / "acme-python-2026-03"
+    content = (dest / "pyproject.toml").read_text()
+    assert '"polars"' in content
+    assert '"numpy"' not in content  # built-in data group has numpy, but overridden
+
+
+def test_custom_extras_unknown_still_rejected(course_env: dict[str, Any]) -> None:
+    """Unknown group not in built-in or custom is still rejected."""
+    course_env["config"].custom_extras = {"finance": ["yfinance"]}
+    sys.argv = ["setup-course", "-c", "acme", "-t", "python", "--extras", "nonexistent"]
+    with pytest.raises(SystemExit):
+        main()
+
+
+def test_custom_and_builtin_groups_together(course_env: dict[str, Any]) -> None:
+    """Custom and built-in groups can be used together."""
+    course_env["config"].custom_extras = {"finance": ["yfinance"]}
+    sys.argv = [
+        "setup-course",
+        "-c",
+        "acme",
+        "-t",
+        "python",
+        "--extras",
+        "python",
+        "finance",
+    ]
+    main()
+    dest = course_env["tmp_path"] / "acme-python-2026-03"
+    content = (dest / "pyproject.toml").read_text()
+    assert '"ipython"' in content
+    assert '"yfinance"' in content
