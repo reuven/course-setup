@@ -2,6 +2,7 @@
 
 import argparse
 import datetime
+import json
 import shutil
 import subprocess
 import urllib.request
@@ -20,6 +21,30 @@ EXTRAS_GROUPS: dict[str, list[str]] = {
     "geo": ["geopandas", "folium", "shapely"],
     "db": ["duckdb", "sqlalchemy"],
     "ml": ["scikit-learn"],
+}
+
+IMPORT_MAP: dict[str, list[str]] = {
+    "python": [],
+    "data": [
+        "import numpy as np",
+        "import pandas as pd",
+        "import plotly.express as px",
+    ],
+    "viz": [
+        "import matplotlib.pyplot as plt",
+        "import seaborn as sns",
+    ],
+    "geo": [
+        "import geopandas as gpd",
+        "import folium",
+    ],
+    "db": [
+        "import duckdb",
+        "import sqlalchemy",
+    ],
+    "ml": [
+        "from sklearn import datasets, model_selection, metrics",
+    ],
 }
 
 MARIMO_TEMPLATE = """\
@@ -100,6 +125,18 @@ def _notebook_dates(start: datetime.date, count: int, freq: str) -> list[datetim
     return [start + step * i for i in range(count)]
 
 
+def _build_import_lines(groups: list[str]) -> str:
+    """Collect import statements for the given extras groups, deduplicated."""
+    seen: set[str] = set()
+    lines: list[str] = []
+    for group in groups:
+        for line in IMPORT_MAP.get(group, []):
+            if line not in seen:
+                seen.add(line)
+                lines.append(line)
+    return "\n".join(lines)
+
+
 def main() -> None:
     config = load_config()
 
@@ -126,6 +163,12 @@ def main() -> None:
         nargs="*",
         default=None,
         help="dependency groups to include (e.g. python data viz geo db ml)",
+    )
+    parser.add_argument(
+        "--add-imports",
+        action="store_true",
+        default=False,
+        help="pre-populate notebooks with import statements from --extras groups",
     )
 
     args = parser.parse_args()
@@ -190,14 +233,58 @@ def main() -> None:
     ipynb_path = Path(f"{destination}/Course notebook.ipynb")
     ipynb_path.unlink()
 
+    import_code = ""
+    if args.add_imports and args.extras:
+        import_code = _build_import_lines(args.extras)
+
     for d in dates:
         notebook_base = f"{args.client}-{args.topic}-{d.strftime('%Y-%m-%d')}"
         if notebook_type == "jupyter":
-            Path(f"{destination}/{notebook_base}.ipynb").write_text(
-                '{"cells": [], "metadata": {}, "nbformat": 4, "nbformat_minor": 5}\n'
-            )
+            if import_code:
+                cell: dict[str, object] = {
+                    "cell_type": "code",
+                    "execution_count": None,
+                    "metadata": {},
+                    "outputs": [],
+                    "source": [import_code],
+                }
+                nb = {
+                    "cells": [cell],
+                    "metadata": {},
+                    "nbformat": 4,
+                    "nbformat_minor": 5,
+                }
+                notebook_content = json.dumps(nb, indent=1) + "\n"
+            else:
+                nb = {
+                    "cells": [],
+                    "metadata": {},
+                    "nbformat": 4,
+                    "nbformat_minor": 5,
+                }
+                notebook_content = json.dumps(nb, indent=1) + "\n"
+            Path(f"{destination}/{notebook_base}.ipynb").write_text(notebook_content)
         else:
-            Path(f"{destination}/{notebook_base}.py").write_text(MARIMO_TEMPLATE)
+            if import_code:
+                marimo_content = f"""\
+import marimo
+
+__generated_with = "0.13.0"
+app = marimo.App()
+
+
+@app.cell
+def _():
+{chr(10).join('    ' + line for line in import_code.split(chr(10)))}
+    return
+
+
+if __name__ == "__main__":
+    app.run()
+"""
+            else:
+                marimo_content = MARIMO_TEMPLATE
+            Path(f"{destination}/{notebook_base}.py").write_text(marimo_content)
 
     # Write pyproject.toml
     pyproject_content = _build_pyproject_toml(repo_name, notebook_type, extra_packages)
