@@ -10,6 +10,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from setup_course_github.setup_course import (
+    EXTRAS_GROUPS,
+    _build_pyproject_toml,
     _get_template_dir,
     _notebook_dates,
     main,
@@ -639,3 +641,153 @@ def test_readme_from_url(course_env: dict[str, Any]) -> None:
     readme = dest / "README.md"
     assert readme.exists()
     assert readme.read_text() == fetched_content
+
+
+# ---------------------------------------------------------------------------
+# --extras flag tests
+# ---------------------------------------------------------------------------
+
+
+def test_extras_python_data_adds_correct_deps(course_env: dict[str, Any]) -> None:
+    """--extras python data adds ipython, numpy, pandas, xlrd, openpyxl, plotly."""
+    sys.argv = [
+        "setup-course",
+        "-c",
+        "acme",
+        "-t",
+        "python",
+        "--extras",
+        "python",
+        "data",
+    ]
+    main()
+    dest = course_env["tmp_path"] / "acme-python-2026-03"
+    content = (dest / "pyproject.toml").read_text()
+    for pkg in ["ipython", "numpy", "pandas", "xlrd", "openpyxl", "plotly"]:
+        assert f'"{pkg}"' in content, f"{pkg} missing from pyproject.toml"
+
+
+def test_extras_empty_adds_no_extra_deps(course_env: dict[str, Any]) -> None:
+    """--extras with no groups adds no extra deps."""
+    sys.argv = [
+        "setup-course",
+        "-c",
+        "acme",
+        "-t",
+        "python",
+        "--extras",
+    ]
+    main()
+    dest = course_env["tmp_path"] / "acme-python-2026-03"
+    content = (dest / "pyproject.toml").read_text()
+    # Should only have jupyter and gitautopush
+    assert '"jupyter"' in content
+    assert '"gitautopush"' in content
+    # None of the extras should be present
+    assert '"ipython"' not in content
+    assert '"numpy"' not in content
+
+
+def test_extras_unknown_group_causes_exit(course_env: dict[str, Any]) -> None:
+    """Unknown group name causes SystemExit via parser.error."""
+    sys.argv = [
+        "setup-course",
+        "-c",
+        "acme",
+        "-t",
+        "python",
+        "--extras",
+        "nonexistent",
+    ]
+    with pytest.raises(SystemExit):
+        main()
+
+
+def test_extras_multiple_groups_merge_and_deduplicate(
+    course_env: dict[str, Any],
+) -> None:
+    """Multiple groups merge and deduplicate correctly."""
+    sys.argv = [
+        "setup-course",
+        "-c",
+        "acme",
+        "-t",
+        "python",
+        "--extras",
+        "viz",
+        "ml",
+    ]
+    main()
+    dest = course_env["tmp_path"] / "acme-python-2026-03"
+    content = (dest / "pyproject.toml").read_text()
+    for pkg in ["matplotlib", "seaborn", "scikit-learn"]:
+        assert f'"{pkg}"' in content, f"{pkg} missing from pyproject.toml"
+
+
+def test_extras_base_deps_always_present(course_env: dict[str, Any]) -> None:
+    """Base deps (jupyter + gitautopush) are always present regardless of extras."""
+    sys.argv = [
+        "setup-course",
+        "-c",
+        "acme",
+        "-t",
+        "python",
+        "--extras",
+        "db",
+    ]
+    main()
+    dest = course_env["tmp_path"] / "acme-python-2026-03"
+    content = (dest / "pyproject.toml").read_text()
+    assert '"jupyter"' in content
+    assert '"gitautopush"' in content
+    assert '"duckdb"' in content
+    assert '"sqlalchemy"' in content
+
+
+def test_extras_deps_sorted_alphabetically(course_env: dict[str, Any]) -> None:
+    """Extra deps are sorted alphabetically in the generated pyproject.toml."""
+    sys.argv = [
+        "setup-course",
+        "-c",
+        "acme",
+        "-t",
+        "python",
+        "--extras",
+        "data",
+    ]
+    main()
+    dest = course_env["tmp_path"] / "acme-python-2026-03"
+    content = (dest / "pyproject.toml").read_text()
+    # Extract dependency lines
+    import re
+
+    deps = re.findall(r'"(\w[\w-]*)"', content)
+    # Filter to just the extras (exclude repo name, jupyter, gitautopush, build deps)
+    extra_deps = [
+        d for d in deps if d in {"numpy", "pandas", "xlrd", "openpyxl", "plotly"}
+    ]
+    assert extra_deps == sorted(extra_deps), f"Extras not sorted: {extra_deps}"
+
+
+def test_build_pyproject_toml_with_extras() -> None:
+    """_build_pyproject_toml includes extras in dependencies when provided."""
+    result = _build_pyproject_toml("test-repo", "jupyter", extras=["numpy", "pandas"])
+    assert '"numpy"' in result
+    assert '"pandas"' in result
+    assert '"jupyter"' in result
+    assert '"gitautopush"' in result
+
+
+def test_build_pyproject_toml_without_extras() -> None:
+    """_build_pyproject_toml works without extras (backward compatible)."""
+    result = _build_pyproject_toml("test-repo", "jupyter")
+    assert '"jupyter"' in result
+    assert '"gitautopush"' in result
+    assert '"numpy"' not in result
+
+
+def test_extras_groups_dict_exists() -> None:
+    """EXTRAS_GROUPS is a dict with expected keys."""
+    assert isinstance(EXTRAS_GROUPS, dict)
+    expected_keys = {"python", "data", "viz", "geo", "db", "ml"}
+    assert set(EXTRAS_GROUPS.keys()) == expected_keys
