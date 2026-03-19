@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import argparse
+import datetime
 import os
 import shutil
 import subprocess
@@ -28,6 +29,11 @@ def _():
 if __name__ == "__main__":
     app.run()
 """
+
+
+def _today() -> datetime.date:
+    """Return today's date. Thin wrapper for testability."""
+    return datetime.date.today()
 
 
 def _get_template_dir() -> Path:
@@ -77,10 +83,9 @@ def main() -> None:
     config = load_config()
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("-d", "--date", required=True)
     parser.add_argument("-c", "--client", required=True)
-    parser.add_argument("-r", "--repo", required=True)
-    parser.add_argument("-n", "--name", default="")
+    parser.add_argument("-t", "--topic", required=True)
+    parser.add_argument("-d", "--date", default=None, help="YYYY-MM override")
     parser.add_argument(
         "--notebook-type",
         choices=["jupyter", "marimo"],
@@ -95,9 +100,11 @@ def main() -> None:
         else config.default_notebook_type
     )
 
-    suffix = f"-{args.name}" if args.name else ""
-    destination = f"{args.client}-{args.date}{suffix}"
-    notebook_base = f"{args.client} - {args.date}{suffix}"
+    today = _today()
+    date_prefix = args.date if args.date else today.strftime("%Y-%m")
+    repo_name = f"{args.client}-{args.topic}-{date_prefix}"
+    destination = repo_name
+    notebook_base = f"{repo_name}-{today.strftime('%d')}"
 
     template_dir = _get_template_dir()
 
@@ -127,7 +134,7 @@ def main() -> None:
         py_path.write_text(MARIMO_TEMPLATE)
 
     # Write pyproject.toml
-    pyproject_content = _build_pyproject_toml(args.repo, notebook_type)
+    pyproject_content = _build_pyproject_toml(repo_name, notebook_type)
     Path(f"{destination}/pyproject.toml").write_text(pyproject_content)
 
     # Authenticate with GitHub API
@@ -135,12 +142,12 @@ def main() -> None:
     user = cast(AuthenticatedUser, github.get_user())
 
     # Write git remote config using API username
-    git_config_content = _build_git_config(user.login, args.repo)
+    git_config_content = _build_git_config(user.login, repo_name)
     with open(f"{destination}/.git/config", "w") as outfile:
         outfile.write(git_config_content)
 
     # Create the repo on GitHub
-    user.create_repo(name=args.repo, private=False)
+    user.create_repo(name=repo_name, private=False)
 
 
 if __name__ == "__main__":  # pragma: no cover
