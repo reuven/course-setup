@@ -346,3 +346,54 @@ def test_default_verbose_invalid_type_raises(tmp_path: Path) -> None:
     config_file.write_text(VERBOSE_INVALID_TOML)
     with pytest.raises(ConfigError, match="verbose"):
         load_config(config_file)
+
+
+# ---------------------------------------------------------------------------
+# Default extras group tests
+# ---------------------------------------------------------------------------
+
+EXTRAS_GROUP_TOML = """
+[github]
+token = "ghp_testtoken"
+
+[paths]
+archive = "/tmp/archive"
+
+[defaults]
+extras_group = "data"
+"""
+
+EXTRAS_GROUP_INVALID_TOML = """
+[github]
+token = "ghp_testtoken"
+
+[paths]
+archive = "/tmp/archive"
+
+[defaults]
+extras_group = 42
+"""
+
+
+def test_default_extras_group_defaults_to_none(tmp_path: Path) -> None:
+    """When extras_group is not in config, it defaults to None."""
+    config_file = tmp_path / "config.toml"
+    config_file.write_text(MINIMAL_TOML)
+    config = load_config(config_file)
+    assert config.default_extras_group is None
+
+
+def test_default_extras_group_loaded(tmp_path: Path) -> None:
+    """extras_group is loaded from config."""
+    config_file = tmp_path / "config.toml"
+    config_file.write_text(EXTRAS_GROUP_TOML)
+    config = load_config(config_file)
+    assert config.default_extras_group == "data"
+
+
+def test_default_extras_group_invalid_type_raises(tmp_path: Path) -> None:
+    """Non-string extras_group raises ConfigError."""
+    config_file = tmp_path / "config.toml"
+    config_file.write_text(EXTRAS_GROUP_INVALID_TOML)
+    with pytest.raises(ConfigError, match="extras_group"):
+        load_config(config_file)
