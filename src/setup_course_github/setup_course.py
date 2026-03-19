@@ -151,7 +151,7 @@ def main() -> None:
     ipynb_path.unlink()
 
     for d in dates:
-        notebook_base = f"{repo_name}-{d.strftime('%m-%d')}"
+        notebook_base = f"{args.client}-{args.topic}-{d.strftime('%Y-%m-%d')}"
         if notebook_type == "jupyter":
             Path(f"{destination}/{notebook_base}.ipynb").write_text(
                 '{"cells": [], "metadata": {}, "nbformat": 4, "nbformat_minor": 5}\n'
