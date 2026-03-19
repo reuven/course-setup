@@ -78,8 +78,8 @@ setup-course -c Acme -t python-intro
 | Group | Packages |
 |-------|----------|
 | `python` | ipython |
-| `data` | numpy, pandas, xlrd, openpyxl, plotly |
-| `viz` | matplotlib, seaborn |
+| `data` | numpy, pandas, xlrd, openpyxl |
+| `viz` | matplotlib, seaborn, plotly |
 | `geo` | geopandas, folium, shapely |
 | `db` | duckdb, sqlalchemy |
 | `ml` | scikit-learn |

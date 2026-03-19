@@ -172,8 +172,8 @@ packages to the generated `pyproject.toml`:
 | Group | Packages | Use case |
 |-------|----------|----------|
 | `python` | ipython | Python courses (enhanced REPL in Jupyter) |
-| `data` | numpy, pandas, xlrd, openpyxl, plotly | Data / Pandas courses (Plotly included for visualization) |
-| `viz` | matplotlib, seaborn | Extra visualization libraries (on top of `data`) |
+| `data` | numpy, pandas, xlrd, openpyxl | Data / Pandas courses |
+| `viz` | matplotlib, seaborn, plotly | Visualization libraries (matplotlib, seaborn, plotly) |
 | `geo` | geopandas, folium, shapely | Geospatial / mapping courses |
 | `db` | duckdb, sqlalchemy | Database courses |
 | `ml` | scikit-learn | Machine learning courses |
