@@ -661,7 +661,7 @@ def test_readme_from_url(course_env: dict[str, Any]) -> None:
 
 
 def test_extras_python_data_adds_correct_deps(course_env: dict[str, Any]) -> None:
-    """--extras python data adds ipython, numpy, pandas, xlrd, openpyxl."""
+    """--extras python data adds ipython, numpy, pandas, xlrd, openpyxl, pyarrow."""
     sys.argv = [
         "setup-course",
         "-c",
@@ -675,7 +675,7 @@ def test_extras_python_data_adds_correct_deps(course_env: dict[str, Any]) -> Non
     main()
     dest = course_env["tmp_path"] / "acme-python-2026-03"
     content = (dest / "pyproject.toml").read_text()
-    for pkg in ["ipython", "numpy", "pandas", "xlrd", "openpyxl"]:
+    for pkg in ["ipython", "numpy", "pandas", "xlrd", "openpyxl", "pyarrow"]:
         assert f'"{pkg}"' in content, f"{pkg} missing from pyproject.toml"
     assert '"plotly"' not in content
 

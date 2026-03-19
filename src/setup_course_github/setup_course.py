@@ -18,7 +18,7 @@ from setup_course_github.config import load_config
 
 EXTRAS_GROUPS: dict[str, list[str]] = {
     "python": ["ipython"],
-    "data": ["numpy", "pandas", "xlrd", "openpyxl"],
+    "data": ["numpy", "pandas", "xlrd", "openpyxl", "pyarrow"],
     "viz": ["matplotlib", "seaborn", "plotly"],
     "geo": ["geopandas", "folium", "shapely"],
     "db": ["duckdb", "sqlalchemy"],
