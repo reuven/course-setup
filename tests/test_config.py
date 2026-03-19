@@ -221,3 +221,77 @@ foo = "bar"
     config_file.write_text(toml_content)
     config = load_config(config_file)
     assert config.github_token == "ghp_testtoken"
+
+
+# ---------------------------------------------------------------------------
+# Custom extras tests
+# ---------------------------------------------------------------------------
+
+CUSTOM_EXTRAS_TOML = """
+[github]
+token = "ghp_testtoken"
+
+[paths]
+archive = "/tmp/archive"
+
+[extras]
+finance = ["yfinance", "pandas-datareader"]
+nlp = ["spacy", "nltk"]
+"""
+
+CUSTOM_EXTRAS_OVERRIDE_TOML = """
+[github]
+token = "ghp_testtoken"
+
+[paths]
+archive = "/tmp/archive"
+
+[extras]
+data = ["polars", "duckdb"]
+"""
+
+INVALID_EXTRAS_TOML = """
+[github]
+token = "ghp_testtoken"
+
+[paths]
+archive = "/tmp/archive"
+
+[extras]
+bad_group = "not-a-list"
+"""
+
+
+def test_custom_extras_loaded(tmp_path: Path) -> None:
+    """Custom extras groups are loaded from [extras] section."""
+    config_file = tmp_path / "config.toml"
+    config_file.write_text(CUSTOM_EXTRAS_TOML)
+    config = load_config(config_file)
+    assert "finance" in config.custom_extras
+    assert config.custom_extras["finance"] == ["yfinance", "pandas-datareader"]
+    assert "nlp" in config.custom_extras
+    assert config.custom_extras["nlp"] == ["spacy", "nltk"]
+
+
+def test_custom_extras_empty_by_default(tmp_path: Path) -> None:
+    """When no [extras] section, custom_extras is empty dict."""
+    config_file = tmp_path / "config.toml"
+    config_file.write_text(MINIMAL_TOML)
+    config = load_config(config_file)
+    assert config.custom_extras == {}
+
+
+def test_custom_extras_override_builtin_name(tmp_path: Path) -> None:
+    """Custom group with same name as built-in is loaded."""
+    config_file = tmp_path / "config.toml"
+    config_file.write_text(CUSTOM_EXTRAS_OVERRIDE_TOML)
+    config = load_config(config_file)
+    assert config.custom_extras["data"] == ["polars", "duckdb"]
+
+
+def test_custom_extras_invalid_type_raises(tmp_path: Path) -> None:
+    """Non-list value in [extras] raises ConfigError."""
+    config_file = tmp_path / "config.toml"
+    config_file.write_text(INVALID_EXTRAS_TOML)
+    with pytest.raises(ConfigError, match="extras.bad_group"):
+        load_config(config_file)
