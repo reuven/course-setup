@@ -102,6 +102,7 @@ def _notebook_dates(start: datetime.date, count: int, freq: str) -> list[datetim
 
 def main() -> None:
     config = load_config()
+    extras_groups = {**EXTRAS_GROUPS, **config.custom_extras}
 
     parser = argparse.ArgumentParser()
     parser.add_argument("-c", "--client", required=True)
@@ -136,7 +137,7 @@ def main() -> None:
 
     # Validate --extras group names
     if args.extras is not None:
-        unknown = [g for g in args.extras if g not in EXTRAS_GROUPS]
+        unknown = [g for g in args.extras if g not in extras_groups]
         if unknown:
             parser.error(f"unknown extras group(s): {', '.join(unknown)}")
 
@@ -146,7 +147,7 @@ def main() -> None:
         seen: set[str] = set()
         flat: list[str] = []
         for group in args.extras:
-            for pkg in EXTRAS_GROUPS[group]:
+            for pkg in extras_groups[group]:
                 if pkg not in seen:
                     seen.add(pkg)
                     flat.append(pkg)
