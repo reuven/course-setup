@@ -1585,3 +1585,120 @@ def test_dry_run_marimo_shows_py_extension(
     output = capsys.readouterr().out
     assert "acme-python-2026-03-19.py" in output
     assert "marimo" in output
+
+
+# ---------------------------------------------------------------------------
+# Rollback tests
+# ---------------------------------------------------------------------------
+
+
+def test_rollback_removes_directory_on_create_repo_failure(
+    course_env: dict[str, Any],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """When create_repo raises, the local directory is removed."""
+    course_env["user"].create_repo.side_effect = RuntimeError("API error")
+    sys.argv = ["setup-course", "-c", "acme", "-t", "python"]
+    with pytest.raises(SystemExit, match="1"):
+        main()
+    dest = course_env["tmp_path"] / "acme-python-2026-03"
+    assert not dest.exists()
+    output = capsys.readouterr().out
+    assert "Rolling back..." in output
+    assert "Removing local directory..." in output
+
+
+def test_rollback_deletes_repo_and_directory_on_push_failure(
+    course_env: dict[str, Any],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """When git push fails after create_repo, both repo and directory are removed."""
+    created_repo = MagicMock()
+    course_env["user"].create_repo.return_value = created_repo
+
+    original_side_effect = _fake_subprocess
+
+    def fail_on_push(*args: Any, **kwargs: Any) -> Any:
+        cmd = args[0] if args else kwargs.get("args", [])
+        if cmd[:2] == ["git", "push"]:
+            raise RuntimeError("push failed")
+        return original_side_effect(*args, **kwargs)
+
+    course_env["mock_run"].side_effect = fail_on_push
+
+    sys.argv = ["setup-course", "-c", "acme", "-t", "python"]
+    with pytest.raises(SystemExit, match="1"):
+        main()
+
+    dest = course_env["tmp_path"] / "acme-python-2026-03"
+    assert not dest.exists()
+    created_repo.delete.assert_called_once()
+    output = capsys.readouterr().out
+    assert "Removing GitHub repository..." in output
+    assert "Removing local directory..." in output
+
+
+def test_rollback_handles_cleanup_failure_gracefully(
+    course_env: dict[str, Any],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """When cleanup itself fails, a warning is printed and rollback continues."""
+    created_repo = MagicMock()
+    created_repo.delete.side_effect = RuntimeError("delete failed")
+    course_env["user"].create_repo.return_value = created_repo
+
+    original_side_effect = _fake_subprocess
+
+    def fail_on_push(*args: Any, **kwargs: Any) -> Any:
+        cmd = args[0] if args else kwargs.get("args", [])
+        if cmd[:2] == ["git", "push"]:
+            raise RuntimeError("push failed")
+        return original_side_effect(*args, **kwargs)
+
+    course_env["mock_run"].side_effect = fail_on_push
+
+    sys.argv = ["setup-course", "-c", "acme", "-t", "python"]
+    with pytest.raises(SystemExit, match="1"):
+        main()
+
+    output = capsys.readouterr().out
+    assert "Warning: failed to remove GitHub repository:" in output
+    # Directory cleanup should still happen even though repo cleanup failed
+    dest = course_env["tmp_path"] / "acme-python-2026-03"
+    assert not dest.exists()
+
+
+def test_no_rollback_on_success(
+    course_env: dict[str, Any],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """On successful run, no rollback messages appear."""
+    sys.argv = ["setup-course", "-c", "acme", "-t", "python"]
+    main()
+    output = capsys.readouterr().out
+    assert "Rolling back..." not in output
+    assert "Done! Course ready at" in output
+
+
+def test_rollback_exit_code_is_1(
+    course_env: dict[str, Any],
+) -> None:
+    """On failure, sys.exit(1) is called."""
+    course_env["user"].create_repo.side_effect = RuntimeError("API error")
+    sys.argv = ["setup-course", "-c", "acme", "-t", "python"]
+    with pytest.raises(SystemExit) as exc_info:
+        main()
+    assert exc_info.value.code == 1
+
+
+def test_rollback_prints_error_message(
+    course_env: dict[str, Any],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """On failure, the error message is printed."""
+    course_env["user"].create_repo.side_effect = RuntimeError("token expired")
+    sys.argv = ["setup-course", "-c", "acme", "-t", "python"]
+    with pytest.raises(SystemExit):
+        main()
+    output = capsys.readouterr().out
+    assert "Error: token expired" in output
