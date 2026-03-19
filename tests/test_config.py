@@ -154,3 +154,70 @@ def test_readme_source_url(tmp_path: Path) -> None:
     config_file.write_text(README_SOURCE_URL_TOML)
     config = load_config(config_file)
     assert config.readme_source == "https://example.com/README.md"
+
+
+# ---------------------------------------------------------------------------
+# Hardening tests
+# ---------------------------------------------------------------------------
+
+
+def test_config_token_takes_precedence_over_env(tmp_path: Path) -> None:
+    """When both config file and env have a token, config file wins."""
+    config_file = tmp_path / "config.toml"
+    config_file.write_text(MINIMAL_TOML)  # has ghp_testtoken
+    with patch.dict(os.environ, {"GITHUB_TOKEN": "env_token_should_lose"}):
+        config = load_config(config_file)
+    assert config.github_token == "ghp_testtoken"
+
+
+def test_empty_token_in_config_falls_back_to_env(tmp_path: Path) -> None:
+    """An empty string token in config should fall back to GITHUB_TOKEN env var."""
+    toml_content = """
+[github]
+token = ""
+
+[paths]
+archive = "/tmp/archive"
+"""
+    config_file = tmp_path / "config.toml"
+    config_file.write_text(toml_content)
+    with patch.dict(os.environ, {"GITHUB_TOKEN": "env_fallback_token"}):
+        config = load_config(config_file)
+    assert config.github_token == "env_fallback_token"
+
+
+def test_empty_readme_source_is_stored(tmp_path: Path) -> None:
+    """An empty readme_source string is stored (not converted to None)."""
+    toml_content = """
+[github]
+token = "ghp_testtoken"
+
+[paths]
+archive = "/tmp/archive"
+readme_source = ""
+"""
+    config_file = tmp_path / "config.toml"
+    config_file.write_text(toml_content)
+    config = load_config(config_file)
+    # Note: empty string is truthy-ish for paths, which might cause issues
+    # downstream. This test documents the current behavior.
+    assert config.readme_source == ""
+
+
+def test_config_ignores_unknown_keys(tmp_path: Path) -> None:
+    """Unknown keys in the config file are silently ignored."""
+    toml_content = """
+[github]
+token = "ghp_testtoken"
+unknown_key = "whatever"
+
+[paths]
+archive = "/tmp/archive"
+
+[some_random_section]
+foo = "bar"
+"""
+    config_file = tmp_path / "config.toml"
+    config_file.write_text(toml_content)
+    config = load_config(config_file)
+    assert config.github_token == "ghp_testtoken"

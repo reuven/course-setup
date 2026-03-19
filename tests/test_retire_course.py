@@ -258,6 +258,67 @@ def test_retire_course_no_os_chdir() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Hardening tests
+# ---------------------------------------------------------------------------
+
+
+def test_parse_repo_name_without_dot_git() -> None:
+    """parse_repo_name handles URLs without the .git suffix."""
+    result = parse_repo_name("git@github.com:someuser/myrepo")
+    assert result == "someuser/myrepo"
+
+
+def test_retire_course_passes_dirname_to_get_remote_url() -> None:
+    """retire_course calls get_remote_url with the dirname it received."""
+    mock_repo = MagicMock()
+    mock_github = MagicMock()
+    mock_github.get_repo.return_value = mock_repo
+
+    with patch(
+        "setup_course_github.retire_course.get_remote_url",
+        return_value="git@github.com:u/r.git",
+    ) as mock_get_url:
+        with patch(
+            "setup_course_github.retire_course.get_github", return_value=mock_github
+        ):
+            with patch(
+                "setup_course_github.retire_course.load_config",
+                return_value=FAKE_CONFIG,
+            ):
+                with patch("shutil.move"):
+                    retire_course("/specific/path/to/course")
+
+    mock_get_url.assert_called_once_with("/specific/path/to/course")
+
+
+def test_retire_course_prints_success_message(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """retire_course prints a success message with the dirname."""
+    mock_repo = MagicMock()
+    mock_github = MagicMock()
+    mock_github.get_repo.return_value = mock_repo
+
+    with patch(
+        "setup_course_github.retire_course.get_remote_url",
+        return_value="git@github.com:u/r.git",
+    ):
+        with patch(
+            "setup_course_github.retire_course.get_github", return_value=mock_github
+        ):
+            with patch(
+                "setup_course_github.retire_course.load_config",
+                return_value=FAKE_CONFIG,
+            ):
+                with patch("shutil.move"):
+                    retire_course("/my/course")
+
+    captured = capsys.readouterr()
+    assert "/my/course" in captured.out
+    assert "retired" in captured.out.lower() or "Successfully" in captured.out
+
+
+# ---------------------------------------------------------------------------
 # main()
 # ---------------------------------------------------------------------------
 
