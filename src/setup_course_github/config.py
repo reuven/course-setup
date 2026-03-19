@@ -1,6 +1,6 @@
 import os
 import tomllib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 CONFIG_PATH = Path.home() / ".config" / "course-setup" / "config.toml"
@@ -18,6 +18,7 @@ class CourseConfig:
     archive_path: Path
     default_notebook_type: str
     readme_source: str | None = None
+    custom_extras: dict[str, list[str]] = field(default_factory=dict)
 
 
 def load_config(path: Path = CONFIG_PATH) -> CourseConfig:
@@ -59,9 +60,18 @@ def load_config(path: Path = CONFIG_PATH) -> CourseConfig:
     # README source: optional file path or URL
     readme_source: str | None = paths_section.get("readme_source")
 
+    # Custom extras groups: optional
+    extras_section = data.get("extras", {})
+    custom_extras: dict[str, list[str]] = {}
+    for group_name, packages in extras_section.items():
+        if not isinstance(packages, list):
+            raise ConfigError(f"extras.{group_name} must be a list of package names")
+        custom_extras[group_name] = [str(p) for p in packages]
+
     return CourseConfig(
         github_token=github_token,
         archive_path=archive_path,
         default_notebook_type=notebook_type,
         readme_source=readme_source,
+        custom_extras=custom_extras,
     )
