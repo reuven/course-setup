@@ -8,6 +8,9 @@
     - Use `uv add` instead of pip
     - Use `uv run` instead of invoking Python and programs directly
     - Don't use venvs explicitly. Instead, just rely on uv
+    - When bumping the project version (any version!), add a tag in Git with that version.
+    - Before building and publishing, delete all old versions in dist. (The fact that we have a Git tag for all old
+versions means we won't lose anything.)
 - Use TDD (test-driven development)
     - Before implementing a feature, write a test.
     - The test will fail.
@@ -23,6 +26,7 @@
 - Use black to format the code and ruff to check it. Do this on a very regular basis, not just at the end. Certainly do it before each Git commit.
 
 - Use type hints everywhere. Run `mypy` with `strict` option all of the time, certainly before committing.
+
 
 - Wherever possible, split work across multiple, parallel agents
     - Have each agent use a different Git worktree when working on the repo in parallel
