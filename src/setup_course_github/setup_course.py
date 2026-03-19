@@ -93,10 +93,6 @@ requires-python = ">=3.13"
 dependencies = [
 {deps_str}
 ]
-
-[build-system]
-requires = ["setuptools"]
-build-backend = "setuptools.build_meta"
 """
 
 
