@@ -18,6 +18,7 @@ class CourseConfig:
     archive_path: Path
     default_notebook_type: str
     readme_source: str | None = None
+    default_verbose: bool = False
     custom_extras: dict[str, list[str]] = field(default_factory=dict)
 
 
@@ -57,6 +58,14 @@ def load_config(path: Path = CONFIG_PATH) -> CourseConfig:
             f"Invalid notebook_type '{notebook_type}'. Must be one of: {valid}"
         )
 
+    # Default verbose: optional, defaults to False
+    raw_verbose: object = defaults_section.get("verbose", False)
+    if not isinstance(raw_verbose, bool):
+        raise ConfigError(
+            f"Invalid verbose value '{raw_verbose}'. Must be true or false"
+        )
+    default_verbose: bool = raw_verbose
+
     # README source: optional file path or URL
     readme_source: str | None = paths_section.get("readme_source")
 
@@ -73,5 +82,6 @@ def load_config(path: Path = CONFIG_PATH) -> CourseConfig:
         archive_path=archive_path,
         default_notebook_type=notebook_type,
         readme_source=readme_source,
+        default_verbose=default_verbose,
         custom_extras=custom_extras,
     )
