@@ -660,7 +660,7 @@ def test_readme_from_url(course_env: dict[str, Any]) -> None:
 
 
 def test_extras_python_data_adds_correct_deps(course_env: dict[str, Any]) -> None:
-    """--extras python data adds ipython, numpy, pandas, xlrd, openpyxl, plotly."""
+    """--extras python data adds ipython, numpy, pandas, xlrd, openpyxl."""
     sys.argv = [
         "setup-course",
         "-c",
@@ -674,8 +674,9 @@ def test_extras_python_data_adds_correct_deps(course_env: dict[str, Any]) -> Non
     main()
     dest = course_env["tmp_path"] / "acme-python-2026-03"
     content = (dest / "pyproject.toml").read_text()
-    for pkg in ["ipython", "numpy", "pandas", "xlrd", "openpyxl", "plotly"]:
+    for pkg in ["ipython", "numpy", "pandas", "xlrd", "openpyxl"]:
         assert f'"{pkg}"' in content, f"{pkg} missing from pyproject.toml"
+    assert '"plotly"' not in content
 
 
 def test_extras_empty_adds_no_extra_deps(course_env: dict[str, Any]) -> None:
@@ -774,9 +775,7 @@ def test_extras_deps_sorted_alphabetically(course_env: dict[str, Any]) -> None:
 
     deps = re.findall(r'"(\w[\w-]*)"', content)
     # Filter to just the extras (exclude repo name, jupyter, gitautopush, build deps)
-    extra_deps = [
-        d for d in deps if d in {"numpy", "pandas", "xlrd", "openpyxl", "plotly"}
-    ]
+    extra_deps = [d for d in deps if d in {"numpy", "pandas", "xlrd", "openpyxl"}]
     assert extra_deps == sorted(extra_deps), f"Extras not sorted: {extra_deps}"
 
 
@@ -1112,10 +1111,18 @@ def test_custom_and_builtin_groups_together(course_env: dict[str, Any]) -> None:
 
 
 def test_build_import_lines_data_group() -> None:
-    """data group produces numpy, pandas, plotly imports."""
+    """data group produces numpy, pandas imports (not plotly)."""
     result = _build_import_lines(["data"])
     assert "import numpy as np" in result
     assert "import pandas as pd" in result
+    assert "import plotly.express as px" not in result
+
+
+def test_build_import_lines_viz_group_includes_plotly() -> None:
+    """viz group includes plotly import."""
+    result = _build_import_lines(["viz"])
+    assert "import matplotlib.pyplot as plt" in result
+    assert "import seaborn as sns" in result
     assert "import plotly.express as px" in result
 
 
