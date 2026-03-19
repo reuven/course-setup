@@ -45,6 +45,7 @@ def make_mock_config(
     config.default_notebook_type = default_notebook_type
     config.readme_source = readme_source
     config.default_verbose = False
+    config.default_extras_group = None
     config.custom_extras = {}
     return config
 
@@ -1709,3 +1710,91 @@ def test_rollback_prints_error_message(
         main()
     output = capsys.readouterr().out
     assert "Error: token expired" in output
+
+
+# ---------------------------------------------------------------------------
+# Default extras group config tests
+# ---------------------------------------------------------------------------
+
+
+def test_default_extras_group_used_when_no_cli_extras(
+    course_env: dict[str, Any],
+) -> None:
+    """Config default_extras_group is used when --extras is not passed."""
+    course_env["config"].default_extras_group = "data"
+    sys.argv = ["setup-course", "-c", "acme", "-t", "python"]
+    main()
+    dest = course_env["tmp_path"] / "acme-python-2026-03"
+    content = (dest / "pyproject.toml").read_text()
+    assert '"numpy"' in content
+    assert '"pandas"' in content
+
+
+def test_cli_extras_overrides_default_extras_group(
+    course_env: dict[str, Any],
+) -> None:
+    """--extras on CLI overrides config default_extras_group."""
+    course_env["config"].default_extras_group = "data"
+    sys.argv = [
+        "setup-course",
+        "-c",
+        "acme",
+        "-t",
+        "python",
+        "--extras",
+        "viz",
+    ]
+    main()
+    dest = course_env["tmp_path"] / "acme-python-2026-03"
+    content = (dest / "pyproject.toml").read_text()
+    assert '"matplotlib"' in content
+    assert '"numpy"' not in content
+
+
+def test_default_extras_group_none_means_no_extras(
+    course_env: dict[str, Any],
+) -> None:
+    """When default_extras_group is None and no --extras, no extras added."""
+    course_env["config"].default_extras_group = None
+    sys.argv = ["setup-course", "-c", "acme", "-t", "python"]
+    main()
+    dest = course_env["tmp_path"] / "acme-python-2026-03"
+    content = (dest / "pyproject.toml").read_text()
+    assert '"numpy"' not in content
+    assert '"matplotlib"' not in content
+
+
+def test_default_extras_group_custom_group(
+    course_env: dict[str, Any],
+) -> None:
+    """Config default_extras_group can refer to a custom extras group."""
+    course_env["config"].custom_extras = {"reuven": ["ipython", "rich"]}
+    course_env["config"].default_extras_group = "reuven"
+    sys.argv = ["setup-course", "-c", "acme", "-t", "python"]
+    main()
+    dest = course_env["tmp_path"] / "acme-python-2026-03"
+    content = (dest / "pyproject.toml").read_text()
+    assert '"ipython"' in content
+    assert '"rich"' in content
+
+
+def test_default_extras_group_unknown_causes_exit(
+    course_env: dict[str, Any],
+) -> None:
+    """Unknown default_extras_group causes SystemExit."""
+    course_env["config"].default_extras_group = "nonexistent"
+    sys.argv = ["setup-course", "-c", "acme", "-t", "python"]
+    with pytest.raises(SystemExit):
+        main()
+
+
+def test_cli_empty_extras_overrides_default_extras_group(
+    course_env: dict[str, Any],
+) -> None:
+    """--extras with no groups overrides default_extras_group (no extras)."""
+    course_env["config"].default_extras_group = "data"
+    sys.argv = ["setup-course", "-c", "acme", "-t", "python", "--extras"]
+    main()
+    dest = course_env["tmp_path"] / "acme-python-2026-03"
+    content = (dest / "pyproject.toml").read_text()
+    assert '"numpy"' not in content
