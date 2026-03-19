@@ -18,8 +18,8 @@ from setup_course_github.config import load_config
 
 EXTRAS_GROUPS: dict[str, list[str]] = {
     "python": ["ipython"],
-    "data": ["numpy", "pandas", "xlrd", "openpyxl", "plotly"],
-    "viz": ["matplotlib", "seaborn"],
+    "data": ["numpy", "pandas", "xlrd", "openpyxl"],
+    "viz": ["matplotlib", "seaborn", "plotly"],
     "geo": ["geopandas", "folium", "shapely"],
     "db": ["duckdb", "sqlalchemy"],
     "ml": ["scikit-learn"],
@@ -30,11 +30,11 @@ IMPORT_MAP: dict[str, list[str]] = {
     "data": [
         "import numpy as np",
         "import pandas as pd",
-        "import plotly.express as px",
     ],
     "viz": [
         "import matplotlib.pyplot as plt",
         "import seaborn as sns",
+        "import plotly.express as px",
     ],
     "geo": [
         "import geopandas as gpd",
