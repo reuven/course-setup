@@ -339,6 +339,77 @@ def test_main_requires_dirname() -> None:
             main()
 
 
+def test_main_multiple_dirs(tmp_path: Path) -> None:
+    """main() calls retire_course once per directory."""
+    dir1 = str(tmp_path / "course1")
+    dir2 = str(tmp_path / "course2")
+    dir3 = str(tmp_path / "course3")
+    with patch("setup_course_github.retire_course.retire_course") as mock_retire:
+        with patch("sys.argv", ["retire-course", dir1, dir2, dir3]):
+            main()
+    assert mock_retire.call_count == 3
+    mock_retire.assert_any_call(dir1)
+    mock_retire.assert_any_call(dir2)
+    mock_retire.assert_any_call(dir3)
+
+
+def test_main_continues_on_failure(tmp_path: Path) -> None:
+    """If one directory fails, the rest are still processed."""
+    dir1 = str(tmp_path / "course1")
+    dir2 = str(tmp_path / "course2")
+
+    def fail_on_first(dirname: str) -> None:
+        if dirname == dir1:
+            raise RuntimeError("GitHub API error")
+
+    with patch(
+        "setup_course_github.retire_course.retire_course",
+        side_effect=fail_on_first,
+    ) as mock_retire:
+        with patch("sys.argv", ["retire-course", dir1, dir2]):
+            with pytest.raises(SystemExit) as exc_info:
+                main()
+    assert exc_info.value.code == 1
+    assert mock_retire.call_count == 2
+
+
+def test_main_exits_1_on_any_failure(tmp_path: Path) -> None:
+    """main() exits with code 1 if any directory fails."""
+    dir1 = str(tmp_path / "course1")
+    with patch(
+        "setup_course_github.retire_course.retire_course",
+        side_effect=RuntimeError("fail"),
+    ):
+        with patch("sys.argv", ["retire-course", dir1]):
+            with pytest.raises(SystemExit) as exc_info:
+                main()
+    assert exc_info.value.code == 1
+
+
+def test_main_no_exit_on_all_success(tmp_path: Path) -> None:
+    """main() does not sys.exit when all directories succeed."""
+    dir1 = str(tmp_path / "course1")
+    dir2 = str(tmp_path / "course2")
+    with patch("setup_course_github.retire_course.retire_course"):
+        with patch("sys.argv", ["retire-course", dir1, dir2]):
+            main()  # Should not raise SystemExit
+
+
+def test_main_error_output(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    """Error messages include the failing directory name."""
+    dir1 = str(tmp_path / "course1")
+    with patch(
+        "setup_course_github.retire_course.retire_course",
+        side_effect=RuntimeError("connection refused"),
+    ):
+        with patch("sys.argv", ["retire-course", dir1]):
+            with pytest.raises(SystemExit):
+                main()
+    captured = capsys.readouterr()
+    assert "course1" in captured.out
+    assert "connection refused" in captured.out
+
+
 # ---------------------------------------------------------------------------
 # setup_course_github.__init__ (get_github, get_github_user)
 # ---------------------------------------------------------------------------
