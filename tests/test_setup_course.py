@@ -18,6 +18,7 @@ from setup_course_github.setup_course import (
     _get_template_dir,
     _notebook_dates,
     _print_status,
+    _print_verbose,
     main,
 )
 
@@ -43,6 +44,7 @@ def make_mock_config(
     config.github_token = "ghp_testtoken"
     config.default_notebook_type = default_notebook_type
     config.readme_source = readme_source
+    config.default_verbose = False
     config.custom_extras = {}
     return config
 
@@ -1331,3 +1333,134 @@ def test_progress_message_readme_absent_when_no_readme_source(
     main()
     output = capsys.readouterr().out
     assert "Setting up README..." not in output
+
+
+# ---------------------------------------------------------------------------
+# Verbose flag tests
+# ---------------------------------------------------------------------------
+
+
+def test_print_verbose_prints_when_true(capsys: pytest.CaptureFixture[str]) -> None:
+    """_print_verbose prints when verbose=True."""
+    _print_verbose("detail info", verbose=True)
+    assert "detail info" in capsys.readouterr().out
+
+
+def test_print_verbose_silent_when_false(capsys: pytest.CaptureFixture[str]) -> None:
+    """_print_verbose is silent when verbose=False."""
+    _print_verbose("detail info", verbose=False)
+    assert capsys.readouterr().out == ""
+
+
+def test_verbose_flag_shows_details(
+    course_env: dict[str, Any],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """With -v, verbose details (template, destination, GitHub user) appear."""
+    sys.argv = ["setup-course", "-c", "acme", "-t", "python", "-v"]
+    main()
+    output = capsys.readouterr().out
+    assert "Template:" in output
+    assert "Destination: acme-python-2026-03" in output
+    assert "GitHub user: testuser" in output
+    assert "Repo: acme-python-2026-03" in output
+    assert "Remote:" in output
+
+
+def test_no_verbose_flag_hides_details(
+    course_env: dict[str, Any],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Without -v, verbose details do NOT appear."""
+    sys.argv = ["setup-course", "-c", "acme", "-t", "python"]
+    main()
+    output = capsys.readouterr().out
+    assert "Template:" not in output
+    assert "GitHub user:" not in output
+    assert "Remote:" not in output
+    # But progress messages still appear
+    assert "Creating course directory..." in output
+
+
+def test_verbose_shows_notebook_filenames(
+    course_env: dict[str, Any],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """With -v, each notebook filename is printed."""
+    sys.argv = [
+        "setup-course",
+        "-c",
+        "acme",
+        "-t",
+        "python",
+        "-n",
+        "3",
+        "-v",
+    ]
+    main()
+    output = capsys.readouterr().out
+    assert "acme-python-2026-03-19.ipynb" in output
+    assert "acme-python-2026-03-20.ipynb" in output
+    assert "acme-python-2026-03-21.ipynb" in output
+
+
+def test_verbose_shows_extras_deps(
+    course_env: dict[str, Any],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """With -v and --extras, dependency list is printed."""
+    sys.argv = [
+        "setup-course",
+        "-c",
+        "acme",
+        "-t",
+        "python",
+        "-v",
+        "--extras",
+        "data",
+    ]
+    main()
+    output = capsys.readouterr().out
+    assert "Dependencies:" in output
+    assert "numpy" in output
+    assert "pandas" in output
+
+
+def test_verbose_shows_readme_source(
+    course_env: dict[str, Any],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """With -v and readme_source, the source is printed."""
+    custom_readme = course_env["tmp_path"] / "my-readme.md"
+    custom_readme.write_text("# Custom\n")
+    course_env["config"].readme_source = str(custom_readme)
+
+    sys.argv = ["setup-course", "-c", "acme", "-t", "python", "-v"]
+    main()
+    output = capsys.readouterr().out
+    assert "README source:" in output
+
+
+def test_verbose_config_default_true(
+    course_env: dict[str, Any],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """When config.default_verbose is True, verbose output appears without -v."""
+    course_env["config"].default_verbose = True
+    sys.argv = ["setup-course", "-c", "acme", "-t", "python"]
+    main()
+    output = capsys.readouterr().out
+    assert "Template:" in output
+    assert "GitHub user:" in output
+
+
+def test_verbose_config_default_false(
+    course_env: dict[str, Any],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """When config.default_verbose is False and no -v, verbose output is hidden."""
+    course_env["config"].default_verbose = False
+    sys.argv = ["setup-course", "-c", "acme", "-t", "python"]
+    main()
+    output = capsys.readouterr().out
+    assert "Template:" not in output
