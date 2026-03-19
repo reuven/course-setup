@@ -109,6 +109,13 @@ token = "ghp_YOUR_TOKEN_HERE"
 # Example: "/Users/yourname/Courses/Archive"
 archive = "/path/to/your/archive"
 
+# Optional: path or URL to a custom README.md for new courses.
+# If not set, the bundled default README is used.
+# Examples:
+#   readme_source = "/Users/yourname/templates/README.md"
+#   readme_source = "https://example.com/my-readme.md"
+# readme_source = ""
+
 [defaults]
 # Default notebook type when running setup-course.
 # Options: "jupyter" or "marimo"
@@ -121,6 +128,7 @@ Fill in each section:
 |---------|----------|-------------|
 | `[github] token` | Yes* | Your GitHub personal access token. |
 | `[paths] archive` | Yes | Absolute path to the directory where retired courses are stored. |
+| `[paths] readme_source` | No | Path or URL to a custom README.md. When set, `setup-course` uses this instead of the bundled default. Can be a local file path or an `https://` URL. |
 | `[defaults] notebook_type` | No | `"jupyter"` (default) or `"marimo"`. Controls which kind of notebook file `setup-course` creates. |
 
 *You can omit the token from the config file and set the `GITHUB_TOKEN`

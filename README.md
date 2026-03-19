@@ -43,12 +43,17 @@ token = "ghp_YOUR_TOKEN_HERE"
 
 [paths]
 archive = "/path/to/your/archive"
+# readme_source = "/path/to/custom/README.md"   # or a URL
 
 [defaults]
 notebook_type = "jupyter"   # or "marimo"
 ```
 
 Edit the file to fill in your GitHub personal access token and archive path.
+
+You can optionally set `readme_source` under `[paths]` to a local file path
+or URL. When set, `setup-course` uses that as the README for new courses
+instead of the bundled default.
 
 Alternatively, you can set the `GITHUB_TOKEN` environment variable instead of putting the token in the config file.
 
