@@ -136,71 +136,73 @@ precedence.
 #### Synopsis
 
 ```
-setup-course -d DATE -c CLIENT -r REPO [-n NAME] [--notebook-type TYPE]
+setup-course -c CLIENT -t TOPIC [-d YYYY-MM] [--notebook-type TYPE]
 ```
 
 #### Options
 
 | Option | Required | Description |
 |--------|----------|-------------|
-| `-d`, `--date` | Yes | The course date, used in the directory and notebook names. Use any format you like (e.g., `2026-03-18`). |
 | `-c`, `--client` | Yes | The client or company name. |
-| `-r`, `--repo` | Yes | The name for the new GitHub repository. |
-| `-n`, `--name` | No | An optional suffix appended to the directory and notebook names (e.g., `advanced`, `day1`). |
+| `-t`, `--topic` | Yes | The course topic (e.g., `python-intro`, `pandas`). |
+| `-d`, `--date` | No | Override the year-month in `YYYY-MM` format. Defaults to the current month. |
 | `--notebook-type` | No | `jupyter` or `marimo`. Overrides the default from your config file. |
 
 #### What it does
 
-1. **Copies the bundled course template** into a new directory in the current
-   working directory. The directory is named `{client}-{date}` — or
-   `{client}-{date}-{name}` if you provide the `-n` flag.
+1. **Auto-generates a repo name** from the client, topic, and date:
+   `{client}-{topic}-{YYYY-MM}`. The same name is used for the local
+   directory and the GitHub repository.
 
-2. **Creates a notebook file** in the new directory:
+2. **Copies the bundled course template** into a new directory in the current
+   working directory.
+
+3. **Creates a notebook file** in the new directory:
    - Jupyter: renames the template's `Course notebook.ipynb` to
-     `{client} - {date}.ipynb` (or `{client} - {date}-{name}.ipynb`).
+     `{client}-{topic}-{YYYY-MM-DD}.ipynb`, where DD is today's day.
    - Marimo: deletes the `.ipynb` and writes a new `.py` file with a minimal
-     Marimo app scaffold.
+     Marimo app scaffold, using the same naming scheme.
 
-3. **Generates a `pyproject.toml`** in the new directory with the repo name,
+4. **Generates a `pyproject.toml`** in the new directory with the repo name,
    a dependency on either `jupyter` or `marimo`, and `gitautopush`.
 
-4. **Creates a public GitHub repository** using the GitHub API and configures
+5. **Creates a public GitHub repository** using the GitHub API and configures
    the local `.git/config` with the correct SSH remote URL, using the
    authenticated user's GitHub username.
 
 #### Example
 
 ```
-setup-course -d 2026-03-18 -c Acme -r acme-python-2026
+setup-course -c Acme -t python-intro
 ```
 
-This creates:
+Run on 2026-03-19, this creates:
 
 ```
-Acme-2026-03-18/
+Acme-python-intro-2026-03/
   .git/
-    config           # remote set to git@github.com:youruser/acme-python-2026.git
-  Acme - 2026-03-18.ipynb
+    config           # remote set to git@github.com:youruser/Acme-python-intro-2026-03.git
+  Acme-python-intro-2026-03-19.ipynb
   pyproject.toml
   README.md
 ```
 
-With the `-n` flag:
+With a date override:
 
 ```
-setup-course -d 2026-03-18 -c Acme -r acme-python-advanced -n advanced
+setup-course -c Acme -t python-intro -d 2025-11
 ```
 
-Creates the directory `Acme-2026-03-18-advanced/` with notebook
-`Acme - 2026-03-18-advanced.ipynb`.
+Creates the directory `Acme-python-intro-2025-11/` with notebook
+`Acme-python-intro-2025-11-19.ipynb` (the day always comes from today).
 
 With Marimo:
 
 ```
-setup-course -d 2026-03-18 -c Acme -r acme-python-2026 --notebook-type marimo
+setup-course -c Acme -t python-intro --notebook-type marimo
 ```
 
-Creates `Acme - 2026-03-18.py` instead of the `.ipynb`.
+Creates `Acme-python-intro-2026-03-19.py` instead of the `.ipynb`.
 
 ---
 
@@ -285,10 +287,10 @@ setup-course-config
 # Edit ~/.config/course-setup/config.toml with your token, archive path, etc.
 
 # Before each course
-setup-course -d 2026-03-18 -c Acme -r acme-python-2026
+setup-course -c Acme -t python-intro
 
 # After the course is over
-retire-course -d ./Acme-2026-03-18
+retire-course -d ./Acme-python-intro-2026-03
 ```
 
 ---
