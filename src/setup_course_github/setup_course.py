@@ -5,7 +5,9 @@ import datetime
 import json
 import shutil
 import subprocess
+import sys
 import urllib.request
+from collections.abc import Callable
 from pathlib import Path
 from typing import cast
 
@@ -255,67 +257,73 @@ def main() -> None:
         _print_status(f"  GitHub repo: <your-github-username>/{repo_name}")
         return
 
-    _print_status("Creating course directory...")
-    _print_verbose(f"  Template: {template_dir}", verbose)
-    _print_verbose(f"  Destination: {destination}", verbose)
-    shutil.copytree(str(template_dir), destination)
+    cleanup_actions: list[tuple[str, Callable[[], None]]] = []
 
-    _print_status("Initializing git repository...")
-    subprocess.run(["git", "init"], cwd=destination, check=True)
+    try:
+        _print_status("Creating course directory...")
+        _print_verbose(f"  Template: {template_dir}", verbose)
+        _print_verbose(f"  Destination: {destination}", verbose)
+        shutil.copytree(str(template_dir), destination)
+        cleanup_actions.append(("local directory", lambda: shutil.rmtree(destination)))
 
-    # Replace README if a custom source is configured
-    if config.readme_source is not None:
-        _print_status("Setting up README...")
-        readme_path = Path(f"{destination}/README.md")
-        source = config.readme_source
-        _print_verbose(f"  README source: {source}", verbose)
-        if source.startswith(("http://", "https://")):
-            with urllib.request.urlopen(source) as response:
-                readme_path.write_text(response.read().decode("utf-8"))
-        else:
-            shutil.copy2(source, str(readme_path))
+        _print_status("Initializing git repository...")
+        subprocess.run(["git", "init"], cwd=destination, check=True)
 
-    # Handle notebook files
-    _print_status("Creating notebook files...")
-    ipynb_path = Path(f"{destination}/Course notebook.ipynb")
-    ipynb_path.unlink()
-
-    import_code = ""
-    if args.add_imports and args.extras:
-        import_code = _build_import_lines(args.extras)
-
-    for d in dates:
-        notebook_base = f"{args.client}-{args.topic}-{d.strftime('%Y-%m-%d')}"
-        ext = ".ipynb" if notebook_type == "jupyter" else ".py"
-        _print_verbose(f"  {notebook_base}{ext}", verbose)
-        if notebook_type == "jupyter":
-            if import_code:
-                cell: dict[str, object] = {
-                    "cell_type": "code",
-                    "execution_count": None,
-                    "metadata": {},
-                    "outputs": [],
-                    "source": [import_code],
-                }
-                nb = {
-                    "cells": [cell],
-                    "metadata": {},
-                    "nbformat": 4,
-                    "nbformat_minor": 5,
-                }
-                notebook_content = json.dumps(nb, indent=1) + "\n"
+        # Replace README if a custom source is configured
+        if config.readme_source is not None:
+            _print_status("Setting up README...")
+            readme_path = Path(f"{destination}/README.md")
+            source = config.readme_source
+            _print_verbose(f"  README source: {source}", verbose)
+            if source.startswith(("http://", "https://")):
+                with urllib.request.urlopen(source) as response:
+                    readme_path.write_text(response.read().decode("utf-8"))
             else:
-                nb = {
-                    "cells": [],
-                    "metadata": {},
-                    "nbformat": 4,
-                    "nbformat_minor": 5,
-                }
-                notebook_content = json.dumps(nb, indent=1) + "\n"
-            Path(f"{destination}/{notebook_base}.ipynb").write_text(notebook_content)
-        else:
-            if import_code:
-                marimo_content = f"""\
+                shutil.copy2(source, str(readme_path))
+
+        # Handle notebook files
+        _print_status("Creating notebook files...")
+        ipynb_path = Path(f"{destination}/Course notebook.ipynb")
+        ipynb_path.unlink()
+
+        import_code = ""
+        if args.add_imports and args.extras:
+            import_code = _build_import_lines(args.extras)
+
+        for d in dates:
+            notebook_base = f"{args.client}-{args.topic}-{d.strftime('%Y-%m-%d')}"
+            ext = ".ipynb" if notebook_type == "jupyter" else ".py"
+            _print_verbose(f"  {notebook_base}{ext}", verbose)
+            if notebook_type == "jupyter":
+                if import_code:
+                    cell: dict[str, object] = {
+                        "cell_type": "code",
+                        "execution_count": None,
+                        "metadata": {},
+                        "outputs": [],
+                        "source": [import_code],
+                    }
+                    nb = {
+                        "cells": [cell],
+                        "metadata": {},
+                        "nbformat": 4,
+                        "nbformat_minor": 5,
+                    }
+                    notebook_content = json.dumps(nb, indent=1) + "\n"
+                else:
+                    nb = {
+                        "cells": [],
+                        "metadata": {},
+                        "nbformat": 4,
+                        "nbformat_minor": 5,
+                    }
+                    notebook_content = json.dumps(nb, indent=1) + "\n"
+                Path(f"{destination}/{notebook_base}.ipynb").write_text(
+                    notebook_content
+                )
+            else:
+                if import_code:
+                    marimo_content = f"""\
 import marimo
 
 __generated_with = "0.13.0"
@@ -331,53 +339,67 @@ def _():
 if __name__ == "__main__":
     app.run()
 """
-            else:
-                marimo_content = MARIMO_TEMPLATE
-            Path(f"{destination}/{notebook_base}.py").write_text(marimo_content)
+                else:
+                    marimo_content = MARIMO_TEMPLATE
+                Path(f"{destination}/{notebook_base}.py").write_text(marimo_content)
 
-    # Write pyproject.toml
-    _print_status("Writing project configuration...")
-    pyproject_content = _build_pyproject_toml(repo_name, notebook_type, extra_packages)
-    if extra_packages:
-        _print_verbose(f"  Dependencies: {', '.join(extra_packages)}", verbose)
-    Path(f"{destination}/pyproject.toml").write_text(pyproject_content)
+        # Write pyproject.toml
+        _print_status("Writing project configuration...")
+        pyproject_content = _build_pyproject_toml(
+            repo_name, notebook_type, extra_packages
+        )
+        if extra_packages:
+            _print_verbose(f"  Dependencies: {', '.join(extra_packages)}", verbose)
+        Path(f"{destination}/pyproject.toml").write_text(pyproject_content)
 
-    # Authenticate with GitHub API
-    _print_status("Creating GitHub repository...")
-    github = Github(config.github_token)
-    user = cast(AuthenticatedUser, github.get_user())
+        # Authenticate with GitHub API
+        _print_status("Creating GitHub repository...")
+        github = Github(config.github_token)
+        user = cast(AuthenticatedUser, github.get_user())
 
-    # Write git remote config using API username
-    _print_verbose(f"  GitHub user: {user.login}", verbose)
-    _print_verbose(f"  Repo: {repo_name}", verbose)
-    git_config_content = _build_git_config(user.login, repo_name)
-    with open(f"{destination}/.git/config", "w") as outfile:
-        outfile.write(git_config_content)
+        # Write git remote config using API username
+        _print_verbose(f"  GitHub user: {user.login}", verbose)
+        _print_verbose(f"  Repo: {repo_name}", verbose)
+        git_config_content = _build_git_config(user.login, repo_name)
+        with open(f"{destination}/.git/config", "w") as outfile:
+            outfile.write(git_config_content)
 
-    # Create the repo on GitHub
-    user.create_repo(name=repo_name, private=False)
+        # Create the repo on GitHub
+        created_repo = user.create_repo(name=repo_name, private=False)
+        cleanup_actions.append(("GitHub repository", lambda: created_repo.delete()))
 
-    # Initial commit and push
-    _print_status("Pushing to GitHub...")
-    remote_url = f"git@github.com:{user.login}/{repo_name}.git"
-    _print_verbose(f"  Remote: {remote_url}", verbose)
-    subprocess.run(["git", "add", "."], cwd=destination, check=True)
-    subprocess.run(
-        ["git", "commit", "-m", "Initial commit"],
-        cwd=destination,
-        check=True,
-    )
-    subprocess.run(
-        ["git", "push", "-u", "origin", "main"],
-        cwd=destination,
-        check=True,
-    )
+        # Initial commit and push
+        _print_status("Pushing to GitHub...")
+        remote_url = f"git@github.com:{user.login}/{repo_name}.git"
+        _print_verbose(f"  Remote: {remote_url}", verbose)
+        subprocess.run(["git", "add", "."], cwd=destination, check=True)
+        subprocess.run(
+            ["git", "commit", "-m", "Initial commit"],
+            cwd=destination,
+            check=True,
+        )
+        subprocess.run(
+            ["git", "push", "-u", "origin", "main"],
+            cwd=destination,
+            check=True,
+        )
 
-    # Install dependencies
-    _print_status("Installing dependencies...")
-    subprocess.run(["uv", "sync"], cwd=destination, check=True)
+        # Install dependencies
+        _print_status("Installing dependencies...")
+        subprocess.run(["uv", "sync"], cwd=destination, check=True)
 
-    _print_status(f"Done! Course ready at {destination}")
+        _print_status(f"Done! Course ready at {destination}")
+
+    except Exception as exc:
+        _print_status(f"Error: {exc}")
+        _print_status("Rolling back...")
+        for name, action in reversed(cleanup_actions):
+            try:
+                _print_status(f"  Removing {name}...")
+                action()
+            except Exception as cleanup_exc:
+                _print_status(f"  Warning: failed to remove {name}: {cleanup_exc}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":  # pragma: no cover
