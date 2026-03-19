@@ -67,6 +67,24 @@ setup-course -c Acme -t python-intro
 | `-n`, `--num-sessions` | Number of sessions (creates one notebook per session) |
 | `--freq` | Session frequency: `daily` or `weekly` (requires `-n`, defaults to `daily`) |
 | `--notebook-type` | `jupyter` or `marimo` (overrides config default) |
+| `--extras` | Dependency groups to add to the course `pyproject.toml` (see below) |
+
+#### Dependency groups
+
+| Group | Packages |
+|-------|----------|
+| `python` | ipython |
+| `data` | numpy, pandas, xlrd, openpyxl, plotly |
+| `viz` | matplotlib, seaborn |
+| `geo` | geopandas, folium, shapely |
+| `db` | duckdb, sqlalchemy |
+| `ml` | scikit-learn |
+
+Example — a Pandas course with Python extras and data/viz packages:
+
+```bash
+setup-course -c Acme -t pandas --extras python data
+```
 
 This will:
 

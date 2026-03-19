@@ -144,7 +144,7 @@ precedence.
 #### Synopsis
 
 ```
-setup-course -c CLIENT -t TOPIC [-d YYYY-MM] [-n NUM] [--freq daily|weekly] [--notebook-type TYPE]
+setup-course -c CLIENT -t TOPIC [-d YYYY-MM] [-n NUM] [--freq daily|weekly] [--notebook-type TYPE] [--extras GROUP ...]
 ```
 
 #### Options
@@ -157,6 +157,31 @@ setup-course -c CLIENT -t TOPIC [-d YYYY-MM] [-n NUM] [--freq daily|weekly] [--n
 | `-n`, `--num-sessions` | No | Number of sessions. Creates one notebook per session. |
 | `--freq` | No | Session frequency: `daily` or `weekly`. Requires `-n`. Defaults to `daily` when `-n` is given. |
 | `--notebook-type` | No | `jupyter` or `marimo`. Overrides the default from your config file. |
+| `--extras` | No | One or more dependency groups to add to the course `pyproject.toml`. See [Dependency groups](#dependency-groups) below. |
+
+#### Dependency groups
+
+The `--extras` flag accepts one or more group names. Each group adds a set of
+packages to the generated `pyproject.toml`:
+
+| Group | Packages | Use case |
+|-------|----------|----------|
+| `python` | ipython | Python courses (enhanced REPL in Jupyter) |
+| `data` | numpy, pandas, xlrd, openpyxl, plotly | Data / Pandas courses (Plotly included for visualization) |
+| `viz` | matplotlib, seaborn | Extra visualization libraries (on top of `data`) |
+| `geo` | geopandas, folium, shapely | Geospatial / mapping courses |
+| `db` | duckdb, sqlalchemy | Database courses |
+| `ml` | scikit-learn | Machine learning courses |
+
+You can combine groups freely:
+
+```
+setup-course -c Acme -t pandas --extras python data
+setup-course -c Acme -t geo-analysis --extras python data geo
+setup-course -c Acme -t ml-intro --extras python data ml
+```
+
+Duplicate packages across groups are automatically deduplicated and sorted.
 
 #### What it does
 
@@ -174,7 +199,8 @@ setup-course -c CLIENT -t TOPIC [-d YYYY-MM] [-n NUM] [--freq daily|weekly] [--n
    dates advancing daily or weekly from today.
 
 4. **Generates a `pyproject.toml`** in the new directory with the repo name,
-   a dependency on either `jupyter` or `marimo`, and `gitautopush`.
+   a dependency on either `jupyter` or `marimo`, `gitautopush`, and any
+   additional packages from `--extras` groups.
 
 5. **Creates a public GitHub repository** using the GitHub API and configures
    the local `.git/config` with the correct SSH remote URL, using the
@@ -230,6 +256,15 @@ setup-course -c Acme -t python-intro -d 2025-11
 
 Creates the directory `Acme-python-intro-2025-11/` with notebook
 `Acme-python-intro-2026-03-19.ipynb` (the day always comes from today).
+
+With dependency groups:
+
+```
+setup-course -c Acme -t pandas --extras python data
+```
+
+Creates the course with ipython, numpy, pandas, xlrd, openpyxl, and plotly
+added to the `pyproject.toml` dependencies alongside jupyter and gitautopush.
 
 With Marimo:
 
@@ -322,7 +357,7 @@ setup-course-config
 # Edit ~/.config/course-setup/config.toml with your token, archive path, etc.
 
 # Before each course
-setup-course -c Acme -t python-intro
+setup-course -c Acme -t python-intro --extras python data
 
 # After the course is over
 retire-course ./Acme-python-intro-2026-03
