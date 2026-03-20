@@ -3,6 +3,8 @@ from github.AuthenticatedUser import AuthenticatedUser
 
 from setup_course_github.config import load_config
 
+__version__ = "2.10.0"
+
 
 def get_github() -> Github:
     config = load_config()
