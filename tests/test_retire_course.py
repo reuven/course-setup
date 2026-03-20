@@ -6,6 +6,7 @@ import pytest
 
 from setup_course_github.config import CourseConfig
 from setup_course_github.retire_course import (
+    _confirm_create_dir,
     get_remote_url,
     main,
     parse_repo_name,
@@ -125,8 +126,9 @@ def test_retire_course_makes_repo_private() -> None:
                 "setup_course_github.retire_course.load_config",
                 return_value=FAKE_CONFIG,
             ):
-                with patch("shutil.move"):
-                    retire_course("/some/course/dir")
+                with patch("setup_course_github.retire_course._confirm_create_dir"):
+                    with patch("shutil.move"):
+                        retire_course("/some/course/dir")
 
     mock_repo.edit.assert_called_once_with(private=True)
 
@@ -147,8 +149,9 @@ def test_retire_course_calls_get_repo_with_parsed_name() -> None:
                 "setup_course_github.retire_course.load_config",
                 return_value=FAKE_CONFIG,
             ):
-                with patch("shutil.move"):
-                    retire_course("/some/course/dir")
+                with patch("setup_course_github.retire_course._confirm_create_dir"):
+                    with patch("shutil.move"):
+                        retire_course("/some/course/dir")
 
     mock_github.get_repo.assert_called_once_with("alice/awesomecourse")
 
@@ -169,8 +172,9 @@ def test_retire_course_shutil_move_correct_source() -> None:
                 "setup_course_github.retire_course.load_config",
                 return_value=FAKE_CONFIG,
             ):
-                with patch("shutil.move") as mock_move:
-                    retire_course("/some/course/dir")
+                with patch("setup_course_github.retire_course._confirm_create_dir"):
+                    with patch("shutil.move") as mock_move:
+                        retire_course("/some/course/dir")
 
     call_args = mock_move.call_args[0]
     assert call_args[0] == "/some/course/dir"
@@ -194,8 +198,9 @@ def test_retire_course_shutil_move_correct_destination() -> None:
                 "setup_course_github.retire_course.load_config",
                 return_value=FAKE_CONFIG,
             ):
-                with patch("shutil.move") as mock_move:
-                    retire_course("/some/course/dir")
+                with patch("setup_course_github.retire_course._confirm_create_dir"):
+                    with patch("shutil.move") as mock_move:
+                        retire_course("/some/course/dir")
 
     call_args = mock_move.call_args[0]
     expected_dest = Path("/tmp/archive") / str(year)
@@ -226,8 +231,9 @@ def test_retire_course_uses_archive_path_from_config() -> None:
                 "setup_course_github.retire_course.load_config",
                 return_value=custom_config,
             ):
-                with patch("shutil.move") as mock_move:
-                    retire_course("/my/course")
+                with patch("setup_course_github.retire_course._confirm_create_dir"):
+                    with patch("shutil.move") as mock_move:
+                        retire_course("/my/course")
 
     expected_dest = Path("/custom/archive") / str(year)
     assert mock_move.call_args[0][1] == expected_dest
@@ -250,9 +256,10 @@ def test_retire_course_no_os_chdir() -> None:
                 "setup_course_github.retire_course.load_config",
                 return_value=FAKE_CONFIG,
             ):
-                with patch("shutil.move"):
-                    with patch("os.chdir") as mock_chdir:
-                        retire_course("/my/course")
+                with patch("setup_course_github.retire_course._confirm_create_dir"):
+                    with patch("shutil.move"):
+                        with patch("os.chdir") as mock_chdir:
+                            retire_course("/my/course")
 
     mock_chdir.assert_not_called()
 
@@ -285,8 +292,9 @@ def test_retire_course_passes_dirname_to_get_remote_url() -> None:
                 "setup_course_github.retire_course.load_config",
                 return_value=FAKE_CONFIG,
             ):
-                with patch("shutil.move"):
-                    retire_course("/specific/path/to/course")
+                with patch("setup_course_github.retire_course._confirm_create_dir"):
+                    with patch("shutil.move"):
+                        retire_course("/specific/path/to/course")
 
     mock_get_url.assert_called_once_with("/specific/path/to/course")
 
@@ -310,8 +318,9 @@ def test_retire_course_prints_success_message(
                 "setup_course_github.retire_course.load_config",
                 return_value=FAKE_CONFIG,
             ):
-                with patch("shutil.move"):
-                    retire_course("/my/course")
+                with patch("setup_course_github.retire_course._confirm_create_dir"):
+                    with patch("shutil.move"):
+                        retire_course("/my/course")
 
     captured = capsys.readouterr()
     assert "/my/course" in captured.out
@@ -506,3 +515,66 @@ def test_main_prints_error_to_stdout(
     # Error appears on stdout, NOT stderr
     assert "some failure" in captured.out
     assert captured.err == ""
+
+
+# ---------------------------------------------------------------------------
+# _confirm_create_dir
+# ---------------------------------------------------------------------------
+
+
+def test_archive_dir_exists_no_prompt(tmp_path: Path) -> None:
+    """When the year directory already exists, no prompt is shown."""
+    year_dir = tmp_path / "2026"
+    year_dir.mkdir()
+
+    mock_confirm = MagicMock()
+    _confirm_create_dir(year_dir, confirm=mock_confirm)
+
+    mock_confirm.assert_not_called()
+
+
+def test_archive_dir_missing_user_says_yes(tmp_path: Path) -> None:
+    """When the year dir doesn't exist and user says 'y', dir is created."""
+    year_dir = tmp_path / "2026"
+    assert not year_dir.exists()
+
+    mock_confirm = MagicMock(return_value="y")
+    _confirm_create_dir(year_dir, confirm=mock_confirm)
+
+    assert year_dir.exists()
+    mock_confirm.assert_called_once()
+
+
+def test_archive_dir_missing_user_says_no(tmp_path: Path) -> None:
+    """When user says 'n', RuntimeError is raised and dir is not created."""
+    year_dir = tmp_path / "2026"
+    assert not year_dir.exists()
+
+    mock_confirm = MagicMock(return_value="n")
+    with pytest.raises(RuntimeError, match="Aborted"):
+        _confirm_create_dir(year_dir, confirm=mock_confirm)
+
+    assert not year_dir.exists()
+
+
+def test_archive_dir_missing_user_says_empty(tmp_path: Path) -> None:
+    """When user just hits Enter (empty string), treated as 'no'."""
+    year_dir = tmp_path / "2026"
+    assert not year_dir.exists()
+
+    mock_confirm = MagicMock(return_value="")
+    with pytest.raises(RuntimeError, match="Aborted"):
+        _confirm_create_dir(year_dir, confirm=mock_confirm)
+
+    assert not year_dir.exists()
+
+
+def test_confirm_create_dir_creates_nested(tmp_path: Path) -> None:
+    """mkdir uses parents=True so intermediate directories are created."""
+    nested_dir = tmp_path / "deep" / "nested" / "2026"
+    assert not nested_dir.exists()
+
+    mock_confirm = MagicMock(return_value="yes")
+    _confirm_create_dir(nested_dir, confirm=mock_confirm)
+
+    assert nested_dir.exists()
