@@ -6,6 +6,7 @@ import pytest
 
 from setup_course_github.config import (
     CONFIG_PATH,
+    LEGACY_CONFIG_PATH,
     ConfigError,
     CourseConfig,
     load_config,
@@ -616,3 +617,66 @@ def test_default_private_invalid_type_raises(tmp_path: Path) -> None:
     config_file.write_text(PRIVATE_INVALID_TOML)
     with pytest.raises(ConfigError, match="private"):
         load_config(config_file)
+
+
+# ---------------------------------------------------------------------------
+# Legacy config path migration tests
+# ---------------------------------------------------------------------------
+
+
+def test_legacy_config_path_is_dot_config() -> None:
+    """LEGACY_CONFIG_PATH points to ~/.config/course-setup/config.toml."""
+    expected = Path.home() / ".config" / "course-setup" / "config.toml"
+    assert LEGACY_CONFIG_PATH == expected
+
+
+def test_migration_warning_when_legacy_exists(tmp_path: Path) -> None:
+    """When new path missing but legacy path exists, error mentions migration."""
+    new_path = tmp_path / "new" / "config.toml"
+    legacy_path = tmp_path / "legacy" / "config.toml"
+    legacy_path.parent.mkdir(parents=True)
+    legacy_path.write_text(MINIMAL_TOML)
+
+    with patch("setup_course_github.config.LEGACY_CONFIG_PATH", legacy_path):
+        with patch("setup_course_github.config.CONFIG_PATH", new_path):
+            with pytest.raises(ConfigError, match="move") as exc_info:
+                load_config(new_path)
+            assert str(legacy_path) in str(exc_info.value)
+            assert str(new_path) in str(exc_info.value)
+
+
+def test_no_migration_warning_when_legacy_absent(tmp_path: Path) -> None:
+    """When neither new nor legacy path exists, normal 'not found' error."""
+    new_path = tmp_path / "new" / "config.toml"
+    legacy_path = tmp_path / "legacy" / "config.toml"  # does not exist
+
+    with patch("setup_course_github.config.LEGACY_CONFIG_PATH", legacy_path):
+        with patch("setup_course_github.config.CONFIG_PATH", new_path):
+            with pytest.raises(ConfigError, match="not found"):
+                load_config(new_path)
+
+
+def test_no_migration_warning_with_custom_path(tmp_path: Path) -> None:
+    """When a custom (non-default) path is passed, no migration check."""
+    custom_path = tmp_path / "custom" / "config.toml"
+    legacy_path = tmp_path / "legacy" / "config.toml"
+    legacy_path.parent.mkdir(parents=True)
+    legacy_path.write_text(MINIMAL_TOML)
+
+    with patch("setup_course_github.config.LEGACY_CONFIG_PATH", legacy_path):
+        with pytest.raises(ConfigError, match="not found"):
+            load_config(custom_path)
+
+
+def test_no_migration_warning_when_new_path_exists(tmp_path: Path) -> None:
+    """When new path exists, legacy path is irrelevant — no migration warning."""
+    new_path = tmp_path / "new" / "config.toml"
+    new_path.parent.mkdir(parents=True)
+    new_path.write_text(MINIMAL_TOML)
+    legacy_path = tmp_path / "legacy" / "config.toml"
+    legacy_path.parent.mkdir(parents=True)
+    legacy_path.write_text(MINIMAL_TOML)
+
+    with patch("setup_course_github.config.LEGACY_CONFIG_PATH", legacy_path):
+        config = load_config(new_path)
+    assert config.github_token == "ghp_testtoken"
