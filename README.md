@@ -29,8 +29,10 @@ Generate a starter config file:
 setup-course-config
 ```
 
-This creates `~/.config/course-setup/config.toml`. Open it and fill in your
-settings:
+This creates a `config.toml` file in your platform's config directory
+(e.g., `~/Library/Application Support/course-setup/` on macOS,
+`~/.config/course-setup/` on Linux, `%APPDATA%\course-setup\` on Windows).
+Open it and fill in your settings:
 
 ```toml
 [github]
