@@ -18,7 +18,8 @@ def test_archive_creates_zip(tmp_path: Path) -> None:
     (course_dir / "file1.txt").write_text("hello")
     (course_dir / "file2.txt").write_text("world")
 
-    zip_path = archive_course(str(course_dir), export_html=False)
+    out = str(tmp_path / "mycourse.zip")
+    zip_path = archive_course(str(course_dir), output=out, export_html=False)
 
     assert zip_path.exists()
     assert zip_path.suffix == ".zip"
@@ -26,6 +27,21 @@ def test_archive_creates_zip(tmp_path: Path) -> None:
         names = zf.namelist()
         assert "mycourse/file1.txt" in names
         assert "mycourse/file2.txt" in names
+
+
+def test_archive_default_output_uses_dirname(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """When no output is given, zip is created in cwd as {dirname}.zip."""
+    course_dir = tmp_path / "mycourse"
+    course_dir.mkdir()
+    (course_dir / "file.txt").write_text("hello")
+
+    monkeypatch.chdir(tmp_path)
+    zip_path = archive_course(str(course_dir), export_html=False)
+
+    assert zip_path == Path("mycourse.zip")
+    assert (tmp_path / "mycourse.zip").exists()
 
 
 def test_archive_custom_output_path(tmp_path: Path) -> None:
@@ -48,9 +64,10 @@ def test_archive_html_export(tmp_path: Path) -> None:
     nb_file = course_dir / "lesson.ipynb"
     nb_file.write_text('{"cells": []}')
 
+    out = str(tmp_path / "out.zip")
     mock_run = MagicMock()
     with patch("setup_course_github.archive_course.subprocess.run", mock_run):
-        archive_course(str(course_dir), export_html=True)
+        archive_course(str(course_dir), output=out, export_html=True)
 
     mock_run.assert_called_once_with(
         ["uv", "run", "jupyter", "nbconvert", "--to", "html", "lesson.ipynb"],
@@ -66,9 +83,10 @@ def test_archive_no_html_flag(tmp_path: Path) -> None:
     course_dir.mkdir()
     (course_dir / "lesson.ipynb").write_text('{"cells": []}')
 
+    out = str(tmp_path / "out.zip")
     mock_run = MagicMock()
     with patch("setup_course_github.archive_course.subprocess.run", mock_run):
-        archive_course(str(course_dir), export_html=False)
+        archive_course(str(course_dir), output=out, export_html=False)
 
     mock_run.assert_not_called()
 
@@ -81,9 +99,10 @@ def test_archive_zip_contains_html(tmp_path: Path) -> None:
     # Simulate the HTML file that nbconvert would create
     (course_dir / "lesson.html").write_text("<html></html>")
 
+    out = str(tmp_path / "out.zip")
     mock_run = MagicMock()
     with patch("setup_course_github.archive_course.subprocess.run", mock_run):
-        zip_path = archive_course(str(course_dir), export_html=True)
+        zip_path = archive_course(str(course_dir), output=out, export_html=True)
 
     with zipfile.ZipFile(zip_path) as zf:
         names = zf.namelist()
@@ -97,9 +116,10 @@ def test_archive_no_notebooks_skips_html(tmp_path: Path) -> None:
     course_dir.mkdir()
     (course_dir / "readme.txt").write_text("no notebooks here")
 
+    out = str(tmp_path / "out.zip")
     mock_run = MagicMock()
     with patch("setup_course_github.archive_course.subprocess.run", mock_run):
-        archive_course(str(course_dir), export_html=True)
+        archive_course(str(course_dir), output=out, export_html=True)
 
     mock_run.assert_not_called()
 
@@ -113,7 +133,8 @@ def test_archive_prints_summary(
     (course_dir / "file1.txt").write_text("hello")
     (course_dir / "file2.txt").write_text("world")
 
-    zip_path = archive_course(str(course_dir), export_html=False)
+    out = str(tmp_path / "mycourse.zip")
+    zip_path = archive_course(str(course_dir), output=out, export_html=False)
 
     captured = capsys.readouterr()
     assert str(zip_path) in captured.out
@@ -176,7 +197,8 @@ def test_archive_excludes_git_and_venv(tmp_path: Path) -> None:
     (course_dir / ".ipynb_checkpoints").mkdir()
     (course_dir / ".ipynb_checkpoints" / "nb.ipynb").write_text("{}")
 
-    zip_path = archive_course(str(course_dir), export_html=False)
+    out = str(tmp_path / "out.zip")
+    zip_path = archive_course(str(course_dir), output=out, export_html=False)
 
     with zipfile.ZipFile(zip_path) as zf:
         names = zf.namelist()
@@ -200,10 +222,11 @@ def test_archive_html_export_failure_continues(
     def fail_nbconvert(*args: object, **kwargs: object) -> None:
         raise sp.CalledProcessError(1, "nbconvert", stderr=b"conversion error")
 
+    out = str(tmp_path / "out.zip")
     with patch(
         "setup_course_github.archive_course.subprocess.run", side_effect=fail_nbconvert
     ):
-        zip_path = archive_course(str(course_dir), export_html=True)
+        zip_path = archive_course(str(course_dir), output=out, export_html=True)
 
     assert zip_path.exists()
     output = capsys.readouterr().out
@@ -221,10 +244,11 @@ def test_archive_html_export_jupyter_not_found(
     def raise_not_found(*args: object, **kwargs: object) -> None:
         raise FileNotFoundError("No such file or directory: 'uv'")
 
+    out = str(tmp_path / "out.zip")
     with patch(
         "setup_course_github.archive_course.subprocess.run", side_effect=raise_not_found
     ):
-        zip_path = archive_course(str(course_dir), export_html=True)
+        zip_path = archive_course(str(course_dir), output=out, export_html=True)
 
     assert zip_path.exists()
     output = capsys.readouterr().out
@@ -238,9 +262,10 @@ def test_archive_notebook_with_spaces_in_name(tmp_path: Path) -> None:
     nb_file = course_dir / "My Notebook - Day 1.ipynb"
     nb_file.write_text('{"cells": []}')
 
+    out = str(tmp_path / "out.zip")
     mock_run = MagicMock()
     with patch("setup_course_github.archive_course.subprocess.run", mock_run):
-        archive_course(str(course_dir), export_html=True)
+        archive_course(str(course_dir), output=out, export_html=True)
 
     # Should pass relative path, not absolute
     mock_run.assert_called_once_with(
@@ -271,9 +296,9 @@ def test_archive_dirname_with_spaces(tmp_path: Path) -> None:
     (course_dir / "notes.txt").write_text("hello")
     (course_dir / "data.csv").write_text("a,b\n1,2\n")
 
-    zip_path = archive_course(str(course_dir), export_html=False)
+    out = str(tmp_path / "My Course.zip")
+    zip_path = archive_course(str(course_dir), output=out, export_html=False)
 
-    assert zip_path.name == "My Course.zip"
     assert zip_path.exists()
     with zipfile.ZipFile(zip_path) as zf:
         names = zf.namelist()
@@ -295,7 +320,8 @@ def test_archive_excludes_dirs_when_dirname_has_spaces(tmp_path: Path) -> None:
     (course_dir / ".ipynb_checkpoints").mkdir()
     (course_dir / ".ipynb_checkpoints" / "nb.ipynb").write_text("{}")
 
-    zip_path = archive_course(str(course_dir), export_html=False)
+    out = str(tmp_path / "out.zip")
+    zip_path = archive_course(str(course_dir), output=out, export_html=False)
 
     with zipfile.ZipFile(zip_path) as zf:
         names = zf.namelist()
