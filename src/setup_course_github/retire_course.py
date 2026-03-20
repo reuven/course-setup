@@ -6,16 +6,9 @@ import re
 import shutil
 import subprocess
 import sys
+import tomllib
 from collections.abc import Callable
 from pathlib import Path
-
-if sys.version_info >= (3, 11):
-    import tomllib
-else:
-    try:
-        import tomllib
-    except ModuleNotFoundError:  # pragma: no cover
-        import tomli as tomllib  # type: ignore[no-redef]
 
 from setup_course_github import __author__, __email__, __version__, get_github
 from setup_course_github.config import load_config
