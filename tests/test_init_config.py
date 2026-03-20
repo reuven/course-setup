@@ -112,3 +112,40 @@ def test_config_contains_extras_section(tmp_path: Path) -> None:
     create_config(config_file)
     content = config_file.read_text()
     assert "extras" in content.lower()
+
+
+# ---------------------------------------------------------------------------
+# Additional QA tests
+# ---------------------------------------------------------------------------
+
+
+def test_main_error_prints_to_stderr(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """When config exists and --force is not used, error goes to stderr."""
+    config_file = tmp_path / "config.toml"
+    config_file.write_text("[github]\ntoken = 'existing'\n")
+    with patch("setup_course_github.init_config.CONFIG_PATH", config_file):
+        from setup_course_github.init_config import main
+
+        with pytest.raises(SystemExit):
+            main([])
+    captured = capsys.readouterr()
+    assert "Error" in captured.err
+    assert "Error" not in captured.out
+
+
+def test_config_template_mentions_verbose(tmp_path: Path) -> None:
+    """The generated config template should mention 'verbose'."""
+    config_file = tmp_path / "config.toml"
+    create_config(config_file)
+    content = config_file.read_text()
+    assert "verbose" in content
+
+
+def test_config_template_mentions_extras_group(tmp_path: Path) -> None:
+    """The generated config template should mention 'extras_group'."""
+    config_file = tmp_path / "config.toml"
+    create_config(config_file)
+    content = config_file.read_text()
+    assert "extras_group" in content

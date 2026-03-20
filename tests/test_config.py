@@ -397,3 +397,51 @@ def test_default_extras_group_invalid_type_raises(tmp_path: Path) -> None:
     config_file.write_text(EXTRAS_GROUP_INVALID_TOML)
     with pytest.raises(ConfigError, match="extras_group"):
         load_config(config_file)
+
+
+# ---------------------------------------------------------------------------
+# Additional QA tests
+# ---------------------------------------------------------------------------
+
+
+def test_invalid_toml_syntax_raises(tmp_path: Path) -> None:
+    """Invalid TOML content raises tomllib.TOMLDecodeError (not ConfigError)."""
+    import tomllib
+
+    config_file = tmp_path / "config.toml"
+    config_file.write_text("[github\nbroken")
+    with pytest.raises(tomllib.TOMLDecodeError):
+        load_config(config_file)
+
+
+def test_empty_archive_string(tmp_path: Path) -> None:
+    """Config with archive = '' raises ConfigError (empty string is falsy)."""
+    toml_content = """
+[github]
+token = "ghp_testtoken"
+
+[paths]
+archive = ""
+"""
+    config_file = tmp_path / "config.toml"
+    config_file.write_text(toml_content)
+    with pytest.raises(ConfigError, match="archive"):
+        load_config(config_file)
+
+
+def test_custom_extras_empty_list(tmp_path: Path) -> None:
+    """Config with finance = [] under [extras] loads with empty list."""
+    toml_content = """
+[github]
+token = "ghp_testtoken"
+
+[paths]
+archive = "/tmp/archive"
+
+[extras]
+finance = []
+"""
+    config_file = tmp_path / "config.toml"
+    config_file.write_text(toml_content)
+    config = load_config(config_file)
+    assert config.custom_extras["finance"] == []
