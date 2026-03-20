@@ -439,3 +439,70 @@ def test_get_github_user_returns_authenticated_user() -> None:
         user = get_github_user()
 
     assert user is mock_user
+
+
+# ---------------------------------------------------------------------------
+# Additional QA tests
+# ---------------------------------------------------------------------------
+
+
+def test_parse_repo_name_https_url() -> None:
+    """Document that parse_repo_name only handles SSH format.
+
+    An HTTPS URL like "https://github.com/user/repo.git" is split on ":"
+    into ["https", "//github.com/user/repo.git"].  Index [1] gives
+    "//github.com/user/repo.git", and after stripping ".git" the result
+    is "//github.com/user/repo" — clearly wrong, but this is the current
+    (known) behavior.
+    """
+    result = parse_repo_name("https://github.com/user/repo.git")
+    # Documents the actual (unexpected) result for HTTPS URLs
+    assert result == "//github.com/user/repo"
+
+
+def test_get_remote_url_empty_on_failure(tmp_path: Path) -> None:
+    """When subprocess returns empty stdout, get_remote_url returns ''."""
+    mock_result = MagicMock()
+    mock_result.stdout = b""
+
+    with patch("subprocess.run", return_value=mock_result):
+        url = get_remote_url(str(tmp_path))
+
+    assert url == ""
+
+
+def test_retire_course_error_on_empty_remote_url() -> None:
+    """When get_remote_url returns '', parse_repo_name raises IndexError."""
+    with patch(
+        "setup_course_github.retire_course.get_remote_url",
+        return_value="",
+    ):
+        with patch(
+            "setup_course_github.retire_course.load_config",
+            return_value=FAKE_CONFIG,
+        ):
+            with pytest.raises(IndexError):
+                retire_course("/some/course/dir")
+
+
+def test_main_prints_error_to_stdout(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Document that errors are printed to stdout, not stderr.
+
+    Line 66 of retire_course.py uses plain print() rather than
+    print(..., file=sys.stderr), so error messages go to stdout.
+    """
+    dir1 = str(tmp_path / "bad_course")
+    with patch(
+        "setup_course_github.retire_course.retire_course",
+        side_effect=RuntimeError("some failure"),
+    ):
+        with patch("sys.argv", ["retire-course", dir1]):
+            with pytest.raises(SystemExit):
+                main()
+
+    captured = capsys.readouterr()
+    # Error appears on stdout, NOT stderr
+    assert "some failure" in captured.out
+    assert captured.err == ""
