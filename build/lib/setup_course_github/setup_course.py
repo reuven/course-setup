@@ -24,9 +24,8 @@ def main():
 
     destination = f"{args.client}-{args.date}{suffix}"
 
-
     # hard-code to be the "generic" directory in the current folder
-    template_dir = Path(__file__).parent / 'generic'
+    template_dir = Path(__file__).parent / "generic"
 
     print(f'Copying from "{template_dir}" to "{destination}"')
 
@@ -41,7 +40,6 @@ def main():
         f"{destination}/Course notebook.ipynb",
         f"{destination}/{args.client} - {args.date}{suffix}.ipynb",
     )
-
 
     remote_info = f"""
     [core]
@@ -59,9 +57,6 @@ def main():
             merge = refs/heads/main
     """
 
-
-
-
     # Write the remote info to the Git configuration file
     with open(f"{destination}/.git/config", "w") as outfile:
         outfile.write(remote_info)
@@ -70,5 +65,6 @@ def main():
     user = get_github_user()
     repo = user.create_repo(name=args.repo, private=False)
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()
