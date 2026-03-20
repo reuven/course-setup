@@ -10,8 +10,9 @@ Install as a [uv tool](https://docs.astral.sh/uv/concepts/tools/) (recommended):
 uv tool install course-setup
 ```
 
-This makes `setup-course`, `retire-course`, and `setup-course-config`
-available on your PATH. To upgrade:
+This makes `setup-course`, `retire-course`, `unretire-course`, and
+`setup-course-config` available on your PATH. All four commands support `--version`, and `--help` displays the
+PyPI URL. To upgrade:
 
 ```bash
 uv tool upgrade course-setup
@@ -47,9 +48,11 @@ notebook_type = "jupyter"   # or "marimo"
 | `[github] token` | Yes | GitHub personal access token. Alternatively, set the `GITHUB_TOKEN` environment variable. |
 | `[paths] archive` | Yes | Directory where retired courses are archived. |
 | `[paths] readme_source` | No | Local path or URL to a custom README for new courses. Omit to use the bundled default. |
+| `[paths] additional_files` | No | List of file/directory paths to copy into every new course (e.g. data files, exercise notebooks). |
 | `[defaults] notebook_type` | No | `"jupyter"` (default) or `"marimo"`. |
 | `[defaults] verbose` | No | `true` or `false` (default). Sets the default verbosity for `setup-course`. |
 | `[defaults] extras_group` | No | Default dependency group when `--extras` is not passed (e.g. `"python"`). |
+| `[defaults] weekend` | No | `"standard"` (skip Sat/Sun) or `"israeli"` (skip Fri/Sat). Default for `--skip-weekends`/`--skip-israeli-weekends`. |
 
 To regenerate the config file, use `setup-course-config --force`.
 
@@ -65,9 +68,12 @@ setup-course -c Acme -t python-intro
 |------|-------------|
 | `-c`, `--client` | Client name (required) |
 | `-t`, `--topic` | Course topic (required) |
-| `-d`, `--date` | YYYY-MM override (defaults to current month) |
+| `-d`, `--date` | YYYY-MM override (defaults to current month). Validated: must be a real month, not more than 2 years ahead. |
 | `-n`, `--num-sessions` | Number of sessions (creates one notebook per session) |
 | `--freq` | Session frequency: `daily` or `weekly` (requires `-n`, defaults to `daily`) |
+| `--first-notebook-date` | Start date for notebook files (YYYY-MM-DD); defaults to today |
+| `--skip-weekends` | Skip Saturdays and Sundays when scheduling notebooks |
+| `--skip-israeli-weekends` | Skip Fridays and Saturdays when scheduling notebooks |
 | `--notebook-type` | `jupyter` or `marimo` (overrides config default) |
 | `--extras` | Dependency groups to add to the course `pyproject.toml` (see below) |
 | `--add-imports` | Pre-populate notebooks with import statements from `--extras` groups |
@@ -106,9 +112,10 @@ This will:
 2. Create a notebook per session, named `{client}-{topic}-{YYYY-MM-DD}`
    (`.ipynb` for Jupyter, `.py` for Marimo)
 3. Generate a `pyproject.toml` with the notebook dependency and `gitautopush`
-4. Configure the local `.git/config` with the GitHub SSH remote
-5. Make an initial commit and push to GitHub
-6. Run `uv sync` to install all dependencies
+4. Include a `.gitignore` for Python, virtual environments, and IDE files
+5. Configure the local `.git/config` with the GitHub SSH remote
+6. Make an initial commit and push to GitHub
+7. Run `uv sync` to install all dependencies
 
 By default, a single notebook is created for today's date. Use `-n` to
 create multiple notebooks for multi-day or multi-week courses:
@@ -132,6 +139,7 @@ This will (for each directory):
 
 1. Make the GitHub repo private
 2. Move the local directory to your configured archive path under the current year
+   (prompts for confirmation if the year directory doesn't exist)
 
 You can retire multiple courses at once:
 
@@ -140,6 +148,17 @@ retire-course ./Acme-2026-03 ./Beta-2026-03 ./Gamma-2026-02
 ```
 
 If any directory fails, the rest are still processed and errors are reported at the end.
+
+### `unretire-course` — Restore a retired course
+
+```bash
+unretire-course /path/to/archive/2026/Acme-python-intro-2026-03
+```
+
+This will:
+
+1. Make the GitHub repo public again
+2. Move the directory from the archive back to your current working directory
 
 ### Live teaching with `gitautopush`
 
