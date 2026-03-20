@@ -618,6 +618,19 @@ def test_bundled_readme_used_when_no_readme_source(
     assert readme.read_text() == "# Course\n"
 
 
+def test_bundled_readme_used_when_readme_source_is_empty_string(
+    course_env: dict[str, Any],
+) -> None:
+    """When readme_source is '', behave as if None — use bundled template."""
+    course_env["config"].readme_source = ""
+    sys.argv = ["setup-course", "-c", "acme", "-t", "python"]
+    main()
+    dest = course_env["tmp_path"] / "acme-python-2026-03"
+    readme = dest / "README.md"
+    assert readme.exists()
+    assert readme.read_text() == "# Course\n"
+
+
 def test_readme_from_local_file(course_env: dict[str, Any]) -> None:
     """When readme_source is a local file path, that file is used as README."""
     custom_readme = course_env["tmp_path"] / "my-custom-readme.md"
