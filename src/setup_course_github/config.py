@@ -3,7 +3,9 @@ import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 
-CONFIG_PATH = Path.home() / ".config" / "course-setup" / "config.toml"
+from platformdirs import user_config_dir
+
+CONFIG_PATH = Path(user_config_dir("course-setup")) / "config.toml"
 
 VALID_NOTEBOOK_TYPES = {"jupyter", "marimo"}
 VALID_WEEKEND_TYPES = {"standard", "israeli"}
