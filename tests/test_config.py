@@ -59,8 +59,11 @@ token = "ghp_testtoken"
 """
 
 
-def test_config_path_is_xdg() -> None:
-    assert CONFIG_PATH == Path.home() / ".config" / "course-setup" / "config.toml"
+def test_config_path_uses_platformdirs() -> None:
+    from platformdirs import user_config_dir
+
+    expected = Path(user_config_dir("course-setup")) / "config.toml"
+    assert CONFIG_PATH == expected
 
 
 def test_load_config_minimal(tmp_path: Path) -> None:
