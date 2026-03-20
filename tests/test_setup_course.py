@@ -3,8 +3,9 @@
 import datetime
 import os
 import sys
+from collections.abc import Generator
 from pathlib import Path
-from typing import Any, Generator
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -51,7 +52,7 @@ def make_mock_config(
     config.default_extras_group = None
     config.custom_extras = {}
     config.default_weekend = default_weekend
-    config.additional_files: list[str] = []
+    config.additional_files = []
     config.default_private = default_private
     return config
 
@@ -75,7 +76,7 @@ def setup_template(tmp_path: Path) -> Path:
 
 
 @pytest.fixture
-def course_env(tmp_path: Path) -> Generator[dict[str, Any], None, None]:
+def course_env(tmp_path: Path) -> Generator[dict[str, Any]]:
     """Set up standard mocks and chdir to tmp_path for a main() call."""
     template = setup_template(tmp_path)
     mock_config = make_mock_config()
