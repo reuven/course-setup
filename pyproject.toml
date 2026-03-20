@@ -33,11 +33,11 @@
 
 
 [build-system]
-  requires = ["setuptools", "wheel"]
-  build-backend = "setuptools.build_meta"
+  requires = ["uv_build>=0.10.2,<0.11.0"]
+  build-backend = "uv_build"
 
-[tool.setuptools.package-data]
-  setup_course_github = ["generic/**/*", "generic/.*"]
+[tool.uv.build-backend]
+  module-name = "setup_course_github"
 
 [dependency-groups]
 dev = [
@@ -52,7 +52,8 @@ dev = [
   target-version = "py313"
 
 [tool.ruff.lint]
-  select = ["E", "F", "I"]
+  select = ["E", "F", "I", "B", "UP"]
+  fixable = ["ALL"]
 
 [tool.ruff.format]
   quote-style = "double"
@@ -61,8 +62,9 @@ dev = [
   strict = true
   python_version = "3.13"
 
-[tool.pytest.ini_options]
-  addopts = "--cov=setup_course_github --cov-report=term-missing --cov-fail-under=100"
+[tool.pytest]
+  minversion = "9.0"
+  addopts = ["--cov=setup_course_github", "--cov-report=term-missing", "--cov-fail-under=100"]
   testpaths = ["tests"]
 
 [tool.coverage.run]
