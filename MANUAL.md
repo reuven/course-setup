@@ -3,13 +3,26 @@
 ## Overview
 
 `course-setup` is a command-line toolkit for managing GitHub-backed course
-repositories. It provides three commands:
+repositories. It provides four commands:
 
 - **`setup-course`** — Create a new course directory with a notebook, a
   `pyproject.toml`, a Git repo, and a matching public GitHub repo.
 - **`retire-course`** — Archive a finished course by making its GitHub repo
   private and moving the local directory into a dated archive folder.
+- **`unretire-course`** — Restore a previously retired course by making its
+  GitHub repo public again and moving the directory back to your working
+  directory.
 - **`setup-course-config`** — Generate a starter configuration file.
+
+All four commands support `--version` to display the installed version and a
+link to the package on PyPI:
+
+```
+setup-course --version
+retire-course --version
+unretire-course --version
+setup-course-config --version
+```
 
 ---
 
@@ -44,11 +57,12 @@ projects), the recommended way to install it is as a
 uv tool install course-setup
 ```
 
-This installs it in an isolated environment and makes the three commands
+This installs it in an isolated environment and makes the four commands
 available globally on your PATH:
 
 - `setup-course`
 - `retire-course`
+- `unretire-course`
 - `setup-course-config`
 
 To upgrade later:
@@ -116,10 +130,38 @@ archive = "/path/to/your/archive"
 #   readme_source = "https://example.com/my-readme.md"
 # readme_source = ""
 
+# Optional: additional files or directories to copy into every new course.
+# Examples: data files, exercise notebooks, solutions folder
+# additional_files = ["/path/to/exercises", "/path/to/data.csv"]
+
 [defaults]
 # Default notebook type when running setup-course.
 # Options: "jupyter" or "marimo"
 notebook_type = "jupyter"
+
+# Whether to show verbose output by default.
+# Can be overridden with -v / --verbose on the command line.
+# verbose = false
+
+# Default dependency group to include when --extras is not specified.
+# Can be a built-in group (python, data, viz, geo, db, ml) or a custom
+# group defined in [extras] below.
+# Example: extras_group = "python"
+# extras_group = ""
+
+# Weekend skipping policy for notebook date scheduling.
+# Options: "standard" (skip Sat+Sun) or "israeli" (skip Fri+Sat)
+# Can be overridden with --skip-weekends or --skip-israeli-weekends
+# on the command line.
+# weekend = "standard"
+
+# [extras]
+# Define custom dependency groups for --extras.
+# These merge with built-in groups (python, data, viz, geo, db, ml).
+# A custom group with the same name as a built-in group overrides it.
+# Example:
+# finance = ["yfinance", "pandas-datareader"]
+# nlp = ["spacy", "nltk"]
 ```
 
 Fill in each section:
@@ -129,25 +171,55 @@ Fill in each section:
 | `[github] token` | Yes* | Your GitHub personal access token. |
 | `[paths] archive` | Yes | Absolute path to the directory where retired courses are stored. |
 | `[paths] readme_source` | No | Path or URL to a custom README.md. When set, `setup-course` uses this instead of the bundled default. Can be a local file path or an `https://` URL. |
+| `[paths] additional_files` | No | List of file or directory paths to copy into every new course directory after template setup. Directories are copied recursively. This is additive -- the listed items are copied alongside the standard template files, not in place of them. |
 | `[defaults] notebook_type` | No | `"jupyter"` (default) or `"marimo"`. Controls which kind of notebook file `setup-course` creates. |
 | `[defaults] verbose` | No | `true` or `false` (default). When `true`, `setup-course` prints detailed output by default. Can be overridden with `-v` on the command line. |
 | `[defaults] extras_group` | No | Name of a dependency group to use by default when `--extras` is not passed on the command line. Can be a built-in group (e.g. `"python"`, `"data"`) or a custom group defined in `[extras]`. |
+| `[defaults] weekend` | No | `"standard"` or `"israeli"`. Sets the default weekend-skipping policy for notebook date scheduling. `"standard"` skips Saturday and Sunday; `"israeli"` skips Friday and Saturday. Can be overridden on the command line with `--skip-weekends` or `--skip-israeli-weekends`. |
 | `[extras] <name>` | No | Custom dependency groups for `--extras`. Each key is a group name, each value is a list of package names. |
 
 *You can omit the token from the config file and set the `GITHUB_TOKEN`
 environment variable instead. If both are set, the config file value takes
 precedence.
 
+#### Additional files example
+
+To automatically include a `data/` folder and a `solutions.py` file in every
+new course:
+
+```toml
+[paths]
+archive = "/Users/reuven/Courses/Archive"
+additional_files = [
+    "/Users/reuven/templates/data",
+    "/Users/reuven/templates/solutions.py",
+]
+```
+
+When `setup-course` runs, it copies each entry into the new course directory:
+
+- A **directory** (like `data/`) is copied recursively, preserving its name
+  and structure.
+- A **file** (like `solutions.py`) is copied directly into the course
+  directory.
+
+If any path in `additional_files` does not exist, `setup-course` raises an
+error and rolls back.
+
 ---
 
 ## Commands
 
-### `setup-course` — Create a new course
+### `setup-course` -- Create a new course
 
 #### Synopsis
 
 ```
-setup-course -c CLIENT -t TOPIC [-d YYYY-MM] [-n NUM] [--freq daily|weekly] [--notebook-type TYPE] [--extras GROUP ...] [--add-imports] [-v] [--dry-run]
+setup-course -c CLIENT -t TOPIC [-d YYYY-MM] [-n NUM] [--freq daily|weekly]
+             [--first-notebook-date YYYY-MM-DD]
+             [--skip-weekends | --skip-israeli-weekends]
+             [--notebook-type TYPE] [--extras GROUP ...] [--add-imports]
+             [-v] [--dry-run] [--version]
 ```
 
 #### Options
@@ -156,14 +228,63 @@ setup-course -c CLIENT -t TOPIC [-d YYYY-MM] [-n NUM] [--freq daily|weekly] [--n
 |--------|----------|-------------|
 | `-c`, `--client` | Yes | The client or company name. |
 | `-t`, `--topic` | Yes | The course topic (e.g., `python-intro`, `pandas`). |
-| `-d`, `--date` | No | Override the year-month in `YYYY-MM` format. Defaults to the current month. |
+| `-d`, `--date` | No | Override the year-month in `YYYY-MM` format. Must be a valid month (01--12) and the year cannot be more than 2 years in the future. Defaults to the current month. |
 | `-n`, `--num-sessions` | No | Number of sessions. Creates one notebook per session. |
 | `--freq` | No | Session frequency: `daily` or `weekly`. Requires `-n`. Defaults to `daily` when `-n` is given. |
+| `--first-notebook-date` | No | Start date for notebook files in `YYYY-MM-DD` format. When set, notebook dates begin from this date instead of today. Useful for scheduling a course that starts in the future. |
+| `--skip-weekends` | No | Skip Saturdays and Sundays when scheduling notebook dates. Mutually exclusive with `--skip-israeli-weekends`. |
+| `--skip-israeli-weekends` | No | Skip Fridays and Saturdays when scheduling notebook dates. Mutually exclusive with `--skip-weekends`. |
 | `--notebook-type` | No | `jupyter` or `marimo`. Overrides the default from your config file. |
 | `--extras` | No | One or more dependency groups to add to the course `pyproject.toml`. See [Dependency groups](#dependency-groups) below. |
 | `--add-imports` | No | Pre-populate each notebook with import statements matching the `--extras` groups. Has no effect without `--extras`. |
 | `-v`, `--verbose` | No | Show detailed output for each step: template and destination paths, notebook filenames, dependency list, GitHub username, repo name, and remote URL. Overrides the `[defaults] verbose` config setting. |
 | `--dry-run` | No | Print a summary of what would be created (repo name, directory, notebooks, dependencies) without making any changes. No filesystem, Git, or GitHub API calls are made. |
+| `--version` | No | Show the version number and PyPI URL, then exit. |
+
+#### Date validation (`-d`)
+
+The `-d` / `--date` flag now performs strict validation:
+
+- The value must match `YYYY-MM` format exactly.
+- The month must be a real month (01 through 12). Values like `2026-13` or
+  `2026-00` are rejected.
+- The year cannot be more than 2 years ahead of the current year. For example,
+  if the current year is 2026, `2029-01` is rejected with the message:
+  `date '2029-01' is too far in the future (max 2028)`.
+
+#### Weekend skipping
+
+When creating multi-session courses, you can skip weekend days so that
+notebook dates only fall on business days. There are two modes:
+
+- **Standard** (`--skip-weekends`): skips Saturday and Sunday.
+- **Israeli** (`--skip-israeli-weekends`): skips Friday and Saturday
+  (the Israeli weekend).
+
+The two flags are mutually exclusive -- you cannot use both at the same time.
+
+You can also set a default in your config file:
+
+```toml
+[defaults]
+weekend = "standard"
+```
+
+or:
+
+```toml
+[defaults]
+weekend = "israeli"
+```
+
+CLI flags always override the config file setting.
+
+**How it works with daily frequency:** skip days are simply not counted. If
+you request 5 daily sessions starting on a Thursday with `--skip-weekends`,
+the dates will be Thu, Fri, Mon, Tue, Wed (skipping Sat and Sun).
+
+**How it works with weekly frequency:** if a 7-day jump lands on a skip day,
+the date is advanced to the next non-skip day.
 
 #### Dependency groups
 
@@ -226,26 +347,34 @@ rejected with a clear error.
    directory and the GitHub repository.
 
 2. **Copies the bundled course template** into a new directory in the current
-   working directory.
+   working directory. The template includes a `.gitignore` file with Python
+   defaults (ignoring `__pycache__/`, `*.pyc`, `.venv/`, `dist/`, `build/`,
+   `.ipynb_checkpoints/`, and common IDE files).
 
-3. **Creates notebook file(s)** in the new directory. Each notebook is named
+3. **Copies additional files** into the course directory, if any are
+   configured via `[paths] additional_files` in your config file. Directories
+   are copied recursively; files are copied directly.
+
+4. **Creates notebook file(s)** in the new directory. Each notebook is named
    `{client}-{topic}-{YYYY-MM-DD}.ipynb` (or `.py` for Marimo), where
    YYYY-MM-DD is the session date. By default a single notebook is created for
-   today. With `-n`, multiple notebooks are created — one per session, with
-   dates advancing daily or weekly from today.
+   today (or for the date given by `--first-notebook-date`). With `-n`,
+   multiple notebooks are created -- one per session, with dates advancing
+   daily or weekly. Weekend days can be skipped with `--skip-weekends` or
+   `--skip-israeli-weekends`.
 
-4. **Generates a `pyproject.toml`** in the new directory with the repo name,
+5. **Generates a `pyproject.toml`** in the new directory with the repo name,
    a dependency on either `jupyter` or `marimo`, `gitautopush`, and any
    additional packages from `--extras` groups.
 
-5. **Creates a public GitHub repository** using the GitHub API and configures
+6. **Creates a public GitHub repository** using the GitHub API and configures
    the local `.git/config` with the correct SSH remote URL, using the
    authenticated user's GitHub username.
 
-6. **Makes an initial commit and pushes** to GitHub, so the repo is ready for
+7. **Makes an initial commit and pushes** to GitHub, so the repo is ready for
    `gitautopush` immediately.
 
-7. **Runs `uv sync`** in the course directory to install all dependencies, so
+8. **Runs `uv sync`** in the course directory to install all dependencies, so
    you can start Jupyter or Marimo right away.
 
 #### Examples
@@ -262,6 +391,7 @@ Creates:
 Acme-python-intro-2026-03/
   .git/
     config           # remote set to git@github.com:youruser/Acme-python-intro-2026-03.git
+  .gitignore         # Python defaults (pycache, venv, dist, etc.)
   Acme-python-intro-2026-03-19.ipynb
   pyproject.toml
   README.md
@@ -298,6 +428,35 @@ setup-course -c Acme -t python-intro -d 2025-11
 
 Creates the directory `Acme-python-intro-2025-11/` with notebook
 `Acme-python-intro-2026-03-19.ipynb` (the day always comes from today).
+
+With a custom first notebook date:
+
+```
+setup-course -c Acme -t python-intro -n 5 --first-notebook-date 2026-04-01
+```
+
+Creates 5 notebooks starting from April 1, 2026:
+`Acme-python-intro-2026-04-01.ipynb` through
+`Acme-python-intro-2026-04-05.ipynb`.
+
+Skipping standard weekends:
+
+```
+setup-course -c Acme -t python-intro -n 5 --first-notebook-date 2026-04-02 --skip-weekends
+```
+
+April 2, 2026 is a Thursday. With `--skip-weekends`, the 5 sessions land on:
+Thu Apr 2, Fri Apr 3, Mon Apr 6, Tue Apr 7, Wed Apr 8 (skipping Sat and Sun).
+
+Skipping Israeli weekends:
+
+```
+setup-course -c Acme -t python-intro -n 5 --first-notebook-date 2026-04-05 --skip-israeli-weekends
+```
+
+April 5, 2026 is a Sunday. With `--skip-israeli-weekends`, the 5 sessions
+land on: Sun Apr 5, Mon Apr 6, Tue Apr 7, Wed Apr 8, Thu Apr 9 (skipping
+Fri and Sat).
 
 With dependency groups:
 
@@ -343,6 +502,14 @@ setup-course -c Acme -t python-intro -v
 Shows detailed information about each step, including template path,
 destination, notebook filenames, dependencies, GitHub user, and remote URL.
 
+Check installed version:
+
+```
+setup-course --version
+```
+
+Prints, for example: `setup-course 2.10.0`.
+
 #### Error handling and rollback
 
 If any step fails during course creation (e.g., the GitHub API call fails
@@ -358,12 +525,12 @@ warning is printed and the remaining cleanup actions still execute.
 
 ---
 
-### `retire-course` — Archive a finished course
+### `retire-course` -- Archive a finished course
 
 #### Synopsis
 
 ```
-retire-course DIRNAME [DIRNAME ...]
+retire-course DIRNAME [DIRNAME ...] [--version]
 ```
 
 #### Arguments
@@ -372,15 +539,32 @@ retire-course DIRNAME [DIRNAME ...]
 |----------|----------|-------------|
 | `DIRNAME...` | Yes | One or more paths to course directories to retire. |
 
+#### Options
+
+| Option | Required | Description |
+|--------|----------|-------------|
+| `--version` | No | Show the version number and PyPI URL, then exit. |
+
 #### What it does
 
 For each directory:
 
 1. **Reads the Git remote URL** from the course directory's `.git/config`.
 2. **Makes the GitHub repository private** via the GitHub API.
-3. **Moves the local directory** into `{archive_path}/{current_year}/`, where
-   `archive_path` is the value from your config file and `current_year` is the
-   four-digit year (e.g., `2026`).
+3. **Determines the archive destination** as `{archive_path}/{current_year}/`,
+   where `archive_path` is the value from your config file and `current_year`
+   is the four-digit year (e.g., `2026`).
+4. **Checks if the year subdirectory exists.** If the year subdirectory
+   (e.g., `2026/`) does not exist, `retire-course` prompts you to create it:
+
+   ```
+   Archive directory /Users/reuven/Courses/Archive/2026 does not exist. Create it? [y/N]
+   ```
+
+   Answer `y` to create it automatically, or `n` (or press Enter) to abort
+   the retirement of that directory.
+
+5. **Moves the local directory** into the year subdirectory.
 
 If any directory fails, the remaining directories are still processed and all
 errors are reported at the end.
@@ -408,18 +592,69 @@ the GitHub repo to private.
 - The course directory must be a Git repo with an SSH remote URL in the format
   `git@github.com:username/reponame.git`.
 - Your GitHub token must have the `repo` scope (and `delete_repo` if needed).
-- The archive directory must already exist. The year subdirectory
-  (e.g., `2026/`) will be the move target, so it should exist or the parent
-  must allow creation.
+- The archive directory (`[paths] archive`) must already exist. The year
+  subdirectory (e.g., `2026/`) will be created automatically if you confirm
+  the prompt.
 
 ---
 
-### `setup-course-config` — Generate a config file
+### `unretire-course` -- Restore a retired course
 
 #### Synopsis
 
 ```
-setup-course-config [--force]
+unretire-course DIRNAME [--version]
+```
+
+#### Arguments
+
+| Argument | Required | Description |
+|----------|----------|-------------|
+| `DIRNAME` | Yes | Path to the retired course directory (typically inside your archive). |
+
+#### Options
+
+| Option | Required | Description |
+|--------|----------|-------------|
+| `--version` | No | Show the version number and PyPI URL, then exit. |
+
+#### What it does
+
+1. **Reads the Git remote URL** from the course directory's `.git/config`.
+2. **Makes the GitHub repository public** again via the GitHub API.
+3. **Moves the course directory** from its current location (typically the
+   archive) into the current working directory, preserving the directory name.
+
+This is the inverse of `retire-course`: it restores a course from the archive
+so you can resume teaching or sharing it.
+
+#### Examples
+
+Unretire a course from the archive:
+
+```
+unretire-course /Users/reuven/Courses/Archive/2026/Acme-python-intro-2026-03
+```
+
+This moves the directory to `./Acme-python-intro-2026-03` in the current
+working directory and makes the GitHub repo public.
+
+#### Error handling
+
+- If a directory with the same name already exists in the current working
+  directory, the command fails with:
+  `Destination already exists: /path/to/Acme-python-intro-2026-03`
+- If the Git remote URL cannot be read or the GitHub API call fails, the
+  command prints an error and exits with code 1.
+
+---
+
+### `setup-course-config` -- Generate a config file
+
+#### Synopsis
+
+```
+setup-course-config [--force] [--version]
 ```
 
 #### Options
@@ -427,6 +662,7 @@ setup-course-config [--force]
 | Option | Required | Description |
 |--------|----------|-------------|
 | `--force` | No | Overwrite an existing config file. Without this flag, the command will refuse to overwrite. |
+| `--version` | No | Show the version number and PyPI URL, then exit. |
 
 #### What it does
 
@@ -456,6 +692,9 @@ setup-course -c Acme -t python-intro --extras python data
 
 # After the course is over
 retire-course ./Acme-python-intro-2026-03
+
+# Need to bring a course back from the archive?
+unretire-course /Users/reuven/Courses/Archive/2026/Acme-python-intro-2026-03
 ```
 
 ---
@@ -496,6 +735,14 @@ along from their own computers.
 | `archive path not found` | Set `archive` in the `[paths]` section of your config. |
 | `Invalid notebook_type` | Must be `"jupyter"` or `"marimo"` in the `[defaults]` section. |
 | `Config file already exists` | Use `setup-course-config --force` to overwrite. |
+| `invalid date 'YYYY-MM': expected YYYY-MM with a valid month` | The `-d` value is not in `YYYY-MM` format, or the month is not between 01 and 12. Use a valid year-month like `2026-03`. |
+| `date 'YYYY-MM' is too far in the future (max YYYY)` | The year in `-d` is more than 2 years ahead of the current year. Use a closer date. |
+| `invalid --first-notebook-date format: '...' (expected YYYY-MM-DD)` | The `--first-notebook-date` value is not a valid ISO date. Use the exact format `YYYY-MM-DD`, e.g. `2026-04-01`. |
+| `Invalid weekend value` | The `[defaults] weekend` config value must be `"standard"` or `"israeli"`. |
+| `Archive directory ... does not exist. Create it? [y/N]` | The year subdirectory under your archive path does not exist yet. Answer `y` to create it, or create it manually first. |
+| `Aborted: archive directory ... not created` | You answered `n` (or pressed Enter) when prompted to create the archive year subdirectory. Create it manually or answer `y` next time. |
+| `Additional file not found: ...` | A path listed in `[paths] additional_files` does not exist. Check the path and fix it in your config file. |
+| `Destination already exists: ...` | When running `unretire-course`, a directory with the same name already exists in the current working directory. Remove or rename it first. |
 | GitHub API 401 error | Your token is invalid or expired. Generate a new one. |
 | GitHub API 403 error | Your token doesn't have the required scopes (`repo`, `delete_repo`). |
 | `Permission denied` on SSH push | Make sure your SSH key is added to your GitHub account and `ssh -T git@github.com` works. |
