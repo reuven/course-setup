@@ -3,24 +3,27 @@
 ## Overview
 
 `course-setup` is a command-line toolkit for managing GitHub-backed course
-repositories. It provides four commands:
+repositories. It provides five commands:
 
 - **`setup-course`** — Create a new course directory with a notebook, a
-  `pyproject.toml`, a Git repo, and a matching public GitHub repo.
+  `pyproject.toml`, a Git repo, and a matching GitHub repo (public or private).
 - **`retire-course`** — Archive a finished course by making its GitHub repo
   private and moving the local directory into a dated archive folder.
 - **`unretire-course`** — Restore a previously retired course by making its
   GitHub repo public again and moving the directory back to your working
   directory.
+- **`archive-course`** — Create a zip archive of a course directory, optionally
+  exporting Jupyter notebooks to HTML.
 - **`setup-course-config`** — Generate a starter configuration file.
 
-All four commands support `--version` to display the installed version and a
-link to the package on PyPI:
+All five commands support `--version` and `--help`. Both display the version
+number, PyPI URL, author name (Reuven Lerner), and email address:
 
 ```
 setup-course --version
 retire-course --version
 unretire-course --version
+archive-course --version
 setup-course-config --version
 ```
 
@@ -57,12 +60,13 @@ projects), the recommended way to install it is as a
 uv tool install course-setup
 ```
 
-This installs it in an isolated environment and makes the four commands
+This installs it in an isolated environment and makes the five commands
 available globally on your PATH:
 
 - `setup-course`
 - `retire-course`
 - `unretire-course`
+- `archive-course`
 - `setup-course-config`
 
 To upgrade later:
@@ -149,6 +153,10 @@ notebook_type = "jupyter"
 # Example: extras_group = "python"
 # extras_group = ""
 
+# Whether to create private GitHub repos by default.
+# Can be overridden with --private on the command line.
+# private = false
+
 # Weekend skipping policy for notebook date scheduling.
 # Options: "standard" (skip Sat+Sun) or "israeli" (skip Fri+Sat)
 # Can be overridden with --skip-weekends or --skip-israeli-weekends
@@ -174,6 +182,7 @@ Fill in each section:
 | `[paths] additional_files` | No | List of file or directory paths to copy into every new course directory after template setup. Directories are copied recursively. This is additive -- the listed items are copied alongside the standard template files, not in place of them. |
 | `[defaults] notebook_type` | No | `"jupyter"` (default) or `"marimo"`. Controls which kind of notebook file `setup-course` creates. |
 | `[defaults] verbose` | No | `true` or `false` (default). When `true`, `setup-course` prints detailed output by default. Can be overridden with `-v` on the command line. |
+| `[defaults] private` | No | `true` or `false` (default). When `true`, `setup-course` creates private GitHub repos by default. Can be overridden with `--private` on the command line. |
 | `[defaults] extras_group` | No | Name of a dependency group to use by default when `--extras` is not passed on the command line. Can be a built-in group (e.g. `"python"`, `"data"`) or a custom group defined in `[extras]`. |
 | `[defaults] weekend` | No | `"standard"` or `"israeli"`. Sets the default weekend-skipping policy for notebook date scheduling. `"standard"` skips Saturday and Sunday; `"israeli"` skips Friday and Saturday. Can be overridden on the command line with `--skip-weekends` or `--skip-israeli-weekends`. |
 | `[extras] <name>` | No | Custom dependency groups for `--extras`. Each key is a group name, each value is a list of package names. |
@@ -219,7 +228,7 @@ setup-course -c CLIENT -t TOPIC [-d YYYY-MM] [-n NUM] [--freq daily|weekly]
              [--first-notebook-date YYYY-MM-DD]
              [--skip-weekends | --skip-israeli-weekends]
              [--notebook-type TYPE] [--extras GROUP ...] [--add-imports]
-             [-v] [--dry-run] [--version]
+             [--private] [-v] [--dry-run] [--version]
 ```
 
 #### Options
@@ -238,8 +247,9 @@ setup-course -c CLIENT -t TOPIC [-d YYYY-MM] [-n NUM] [--freq daily|weekly]
 | `--extras` | No | One or more dependency groups to add to the course `pyproject.toml`. See [Dependency groups](#dependency-groups) below. |
 | `--add-imports` | No | Pre-populate each notebook with import statements matching the `--extras` groups. Has no effect without `--extras`. |
 | `-v`, `--verbose` | No | Show detailed output for each step: template and destination paths, notebook filenames, dependency list, GitHub username, repo name, and remote URL. Overrides the `[defaults] verbose` config setting. |
+| `--private` | No | Create the GitHub repo as private instead of public. Overrides the `[defaults] private` config setting. |
 | `--dry-run` | No | Print a summary of what would be created (repo name, directory, notebooks, dependencies) without making any changes. No filesystem, Git, or GitHub API calls are made. |
-| `--version` | No | Show the version number and PyPI URL, then exit. |
+| `--version` | No | Show the version number, PyPI URL, author, and email, then exit. |
 
 #### Date validation (`-d`)
 
@@ -367,9 +377,10 @@ rejected with a clear error.
    a dependency on either `jupyter` or `marimo`, `gitautopush`, and any
    additional packages from `--extras` groups.
 
-6. **Creates a public GitHub repository** using the GitHub API and configures
-   the local `.git/config` with the correct SSH remote URL, using the
-   authenticated user's GitHub username.
+6. **Creates a GitHub repository** (public by default, or private with
+   `--private`) using the GitHub API and configures the local `.git/config`
+   with the correct SSH remote URL, using the authenticated user's GitHub
+   username.
 
 7. **Makes an initial commit and pushes** to GitHub, so the repo is ready for
    `gitautopush` immediately.
@@ -508,7 +519,7 @@ Check installed version:
 setup-course --version
 ```
 
-Prints, for example: `setup-course 2.10.0`.
+Prints the version number, PyPI URL, author name (Reuven Lerner), and email.
 
 #### Error handling and rollback
 
@@ -543,7 +554,7 @@ retire-course DIRNAME [DIRNAME ...] [--version]
 
 | Option | Required | Description |
 |--------|----------|-------------|
-| `--version` | No | Show the version number and PyPI URL, then exit. |
+| `--version` | No | Show the version number, PyPI URL, author, and email, then exit. |
 
 #### What it does
 
@@ -565,6 +576,12 @@ For each directory:
    the retirement of that directory.
 
 5. **Moves the local directory** into the year subdirectory.
+6. **Prints a retirement summary** including:
+   - Number of notebooks (`.ipynb` and/or marimo `.py`)
+   - Date range extracted from notebook filenames
+   - Dependencies from the course `pyproject.toml`
+   - Archive location (full path)
+   - GitHub repo URL (now private)
 
 If any directory fails, the remaining directories are still processed and all
 errors are reported at the end.
@@ -616,7 +633,7 @@ unretire-course DIRNAME [--version]
 
 | Option | Required | Description |
 |--------|----------|-------------|
-| `--version` | No | Show the version number and PyPI URL, then exit. |
+| `--version` | No | Show the version number, PyPI URL, author, and email, then exit. |
 
 #### What it does
 
@@ -649,6 +666,69 @@ working directory and makes the GitHub repo public.
 
 ---
 
+### `archive-course` -- Create a zip archive
+
+#### Synopsis
+
+```
+archive-course DIRNAME [--output PATH] [--no-html] [--version]
+```
+
+#### Arguments
+
+| Argument | Required | Description |
+|----------|----------|-------------|
+| `DIRNAME` | Yes | Path to the course directory to archive. |
+
+#### Options
+
+| Option | Required | Description |
+|--------|----------|-------------|
+| `--output`, `-o` | No | Custom output path for the zip file. Defaults to `{dirname}.zip` in the current working directory. |
+| `--no-html` | No | Skip HTML export of Jupyter notebooks. By default, each `.ipynb` file is exported to HTML via `nbconvert` and both the `.ipynb` and `.html` are included in the zip. |
+| `--version` | No | Show the version number, PyPI URL, author, and email, then exit. |
+
+#### What it does
+
+1. **Finds all Jupyter notebooks** (`.ipynb` files) in the course directory
+   (recursively).
+2. **Exports each notebook to HTML** using `uv run jupyter nbconvert --to html`.
+   This step is skipped if `--no-html` is passed or if no notebooks are found.
+3. **Creates a zip archive** containing all files in the course directory
+   (including the generated `.html` files). The archive preserves the directory
+   structure, with the course directory as the top-level folder inside the zip.
+4. **Prints a summary** showing:
+   - Archive path and file count
+   - Archive size in bytes
+   - List of notebooks and their corresponding HTML exports
+
+#### Examples
+
+Archive a course with HTML exports (default):
+
+```
+archive-course ./Acme-python-intro-2026-03
+```
+
+Creates `Acme-python-intro-2026-03.zip` containing all course files plus HTML
+versions of every notebook.
+
+Archive to a custom path:
+
+```
+archive-course ./Acme-python-intro-2026-03 -o /tmp/acme-course.zip
+```
+
+Skip HTML export:
+
+```
+archive-course ./Acme-python-intro-2026-03 --no-html
+```
+
+Creates the zip with only the original `.ipynb` files (no HTML conversion).
+
+---
+
 ### `setup-course-config` -- Generate a config file
 
 #### Synopsis
@@ -662,7 +742,7 @@ setup-course-config [--force] [--version]
 | Option | Required | Description |
 |--------|----------|-------------|
 | `--force` | No | Overwrite an existing config file. Without this flag, the command will refuse to overwrite. |
-| `--version` | No | Show the version number and PyPI URL, then exit. |
+| `--version` | No | Show the version number, PyPI URL, author, and email, then exit. |
 
 #### What it does
 
@@ -690,7 +770,10 @@ setup-course-config
 # Before each course
 setup-course -c Acme -t python-intro --extras python data
 
-# After the course is over
+# After the course is over — archive a zip for your records
+archive-course ./Acme-python-intro-2026-03
+
+# Retire the course (makes GitHub repo private, moves to archive)
 retire-course ./Acme-python-intro-2026-03
 
 # Need to bring a course back from the archive?

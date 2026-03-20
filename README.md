@@ -10,9 +10,10 @@ Install as a [uv tool](https://docs.astral.sh/uv/concepts/tools/) (recommended):
 uv tool install course-setup
 ```
 
-This makes `setup-course`, `retire-course`, `unretire-course`, and
-`setup-course-config` available on your PATH. All four commands support `--version`, and `--help` displays the
-PyPI URL. To upgrade:
+This makes `setup-course`, `retire-course`, `unretire-course`,
+`archive-course`, and `setup-course-config` available on your PATH. All five
+commands support `--version` and `--help`, which display the version number,
+PyPI URL, author name (Reuven Lerner), and email. To upgrade:
 
 ```bash
 uv tool upgrade course-setup
@@ -51,6 +52,7 @@ notebook_type = "jupyter"   # or "marimo"
 | `[paths] additional_files` | No | List of file/directory paths to copy into every new course (e.g. data files, exercise notebooks). |
 | `[defaults] notebook_type` | No | `"jupyter"` (default) or `"marimo"`. |
 | `[defaults] verbose` | No | `true` or `false` (default). Sets the default verbosity for `setup-course`. |
+| `[defaults] private` | No | `true` or `false` (default). When `true`, `setup-course` creates private GitHub repos by default. |
 | `[defaults] extras_group` | No | Default dependency group when `--extras` is not passed (e.g. `"python"`). |
 | `[defaults] weekend` | No | `"standard"` (skip Sat/Sun) or `"israeli"` (skip Fri/Sat). Default for `--skip-weekends`/`--skip-israeli-weekends`. |
 
@@ -78,6 +80,7 @@ setup-course -c Acme -t python-intro
 | `--extras` | Dependency groups to add to the course `pyproject.toml` (see below) |
 | `--add-imports` | Pre-populate notebooks with import statements from `--extras` groups |
 | `-v`, `--verbose` | Show detailed output (paths, filenames, dependencies) |
+| `--private` | Create the GitHub repo as private instead of public (overrides config default) |
 | `--dry-run` | Preview what would be created without making any changes |
 
 #### Dependency groups
@@ -108,7 +111,7 @@ setup-course -c Acme -t pandas --extras python data
 
 This will:
 
-1. Create a directory and GitHub repo named `{client}-{topic}-{YYYY-MM}`
+1. Create a directory and GitHub repo named `{client}-{topic}-{YYYY-MM}` (public by default; use `--private` for private)
 2. Create a notebook per session, named `{client}-{topic}-{YYYY-MM-DD}`
    (`.ipynb` for Jupyter, `.py` for Marimo)
 3. Generate a `pyproject.toml` with the notebook dependency and `gitautopush`
@@ -140,6 +143,8 @@ This will (for each directory):
 1. Make the GitHub repo private
 2. Move the local directory to your configured archive path under the current year
    (prompts for confirmation if the year directory doesn't exist)
+3. Print a retirement summary showing: notebook count, date range, dependencies,
+   archive location, and GitHub URL
 
 You can retire multiple courses at once:
 
@@ -148,6 +153,23 @@ retire-course ./Acme-2026-03 ./Beta-2026-03 ./Gamma-2026-02
 ```
 
 If any directory fails, the rest are still processed and errors are reported at the end.
+
+### `archive-course` — Create a zip archive of a course
+
+```bash
+archive-course ./Acme-python-intro-2026-03
+```
+
+| Flag | Description |
+|------|-------------|
+| `--output`, `-o` | Custom output zip path (defaults to `{dirname}.zip`) |
+| `--no-html` | Skip HTML export of Jupyter notebooks |
+
+For Jupyter notebooks, `archive-course` exports each `.ipynb` to HTML via
+`nbconvert` and includes both the `.ipynb` and `.html` files in the zip. Use
+`--no-html` to skip the HTML export. After creating the archive, a summary is
+printed showing the archive path, file count, size, and which notebooks were
+included.
 
 ### `unretire-course` — Restore a retired course
 
