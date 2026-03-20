@@ -305,7 +305,7 @@ With dependency groups:
 setup-course -c Acme -t pandas --extras python data
 ```
 
-Creates the course with ipython, numpy, pandas, xlrd, openpyxl, pyarrow, and plotly
+Creates the course with ipython, numpy, pandas, xlrd, openpyxl, and pyarrow
 added to the `pyproject.toml` dependencies alongside jupyter and gitautopush.
 
 With pre-populated imports:
@@ -315,7 +315,7 @@ setup-course -c Acme -t pandas --extras python data --add-imports
 ```
 
 Same as above, but each notebook starts with a code cell containing:
-`import numpy as np`, `import pandas as pd`, `import plotly.express as px`.
+`import numpy as np`, `import pandas as pd`.
 
 With Marimo:
 
