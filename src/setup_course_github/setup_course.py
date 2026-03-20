@@ -322,7 +322,7 @@ def main() -> None:
         subprocess.run(["git", "init"], cwd=destination, check=True)
 
         # Replace README if a custom source is configured
-        if config.readme_source is not None:
+        if config.readme_source:
             _print_status("Setting up README...")
             readme_path = Path(f"{destination}/README.md")
             source = config.readme_source
