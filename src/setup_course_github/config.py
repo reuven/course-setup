@@ -6,6 +6,7 @@ from pathlib import Path
 from platformdirs import user_config_dir
 
 CONFIG_PATH = Path(user_config_dir("course-setup")) / "config.toml"
+LEGACY_CONFIG_PATH = Path.home() / ".config" / "course-setup" / "config.toml"
 
 VALID_NOTEBOOK_TYPES = {"jupyter", "marimo"}
 VALID_WEEKEND_TYPES = {"standard", "israeli"}
@@ -31,6 +32,13 @@ class CourseConfig:
 
 def load_config(path: Path = CONFIG_PATH) -> CourseConfig:
     if not path.exists():
+        # Check for legacy ~/.config path when using the default location
+        if path == CONFIG_PATH and LEGACY_CONFIG_PATH.exists():
+            raise ConfigError(
+                f"Config file found at old location: {LEGACY_CONFIG_PATH}\n"
+                f"Please move it to the new location:\n"
+                f"  mv {LEGACY_CONFIG_PATH} {CONFIG_PATH}"
+            )
         raise ConfigError(
             f"Config file not found: {path}\nRun `setup-course-config` to create it."
         )
