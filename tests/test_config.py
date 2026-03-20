@@ -680,3 +680,18 @@ def test_no_migration_warning_when_new_path_exists(tmp_path: Path) -> None:
     with patch("setup_course_github.config.LEGACY_CONFIG_PATH", legacy_path):
         config = load_config(new_path)
     assert config.github_token == "ghp_testtoken"
+
+
+def test_migration_mv_command_quotes_paths(tmp_path: Path) -> None:
+    """The mv command in migration message quotes paths for shell safety."""
+    new_path = tmp_path / "Application Support" / "config.toml"
+    legacy_path = tmp_path / "legacy" / "config.toml"
+    legacy_path.parent.mkdir(parents=True)
+    legacy_path.write_text(MINIMAL_TOML)
+
+    with patch("setup_course_github.config.LEGACY_CONFIG_PATH", legacy_path):
+        with patch("setup_course_github.config.CONFIG_PATH", new_path):
+            with pytest.raises(ConfigError) as exc_info:
+                load_config(new_path)
+            msg = str(exc_info.value)
+            assert f'mv "{legacy_path}" "{new_path}"' in msg
