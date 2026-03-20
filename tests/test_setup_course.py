@@ -39,6 +39,7 @@ def _fake_subprocess(*args: Any, **kwargs: Any) -> Any:
 def make_mock_config(
     default_notebook_type: str = "jupyter",
     readme_source: str | None = None,
+    default_weekend: str | None = None,
 ) -> MagicMock:
     """Return a mock CourseConfig with sensible defaults."""
     config = MagicMock()
@@ -48,6 +49,7 @@ def make_mock_config(
     config.default_verbose = False
     config.default_extras_group = None
     config.custom_extras = {}
+    config.default_weekend = default_weekend
     return config
 
 
@@ -2066,3 +2068,187 @@ def test_dry_run_shows_notebook_type(
     main()
     output = capsys.readouterr().out
     assert "Notebook type: marimo" in output
+
+
+# ---------------------------------------------------------------------------
+# --version flag
+# ---------------------------------------------------------------------------
+
+
+def test_version_flag_prints_version(capsys: pytest.CaptureFixture[str]) -> None:
+    """--version prints the version string and exits cleanly."""
+    from setup_course_github import __version__
+
+    with patch("sys.argv", ["setup-course", "--version"]):
+        with pytest.raises(SystemExit) as exc_info:
+            main()
+    assert exc_info.value.code == 0
+    captured = capsys.readouterr()
+    output = captured.out + captured.err
+    assert __version__ in output
+
+
+# ---------------------------------------------------------------------------
+# --first-notebook-date flag tests
+# ---------------------------------------------------------------------------
+
+
+def test_first_notebook_date_sets_start(course_env: dict[str, Any]) -> None:
+    """--first-notebook-date overrides notebook start date."""
+    sys.argv = [
+        "setup-course",
+        "-c",
+        "acme",
+        "-t",
+        "python",
+        "--first-notebook-date",
+        "2026-04-01",
+        "-n",
+        "3",
+    ]
+    main()
+    dest = course_env["tmp_path"] / "acme-python-2026-03"
+    assert (dest / "acme-python-2026-04-01.ipynb").exists()
+    assert (dest / "acme-python-2026-04-02.ipynb").exists()
+    assert (dest / "acme-python-2026-04-03.ipynb").exists()
+
+
+def test_first_notebook_date_with_weekly(course_env: dict[str, Any]) -> None:
+    """--first-notebook-date with --freq weekly spaces notebooks a week apart."""
+    sys.argv = [
+        "setup-course",
+        "-c",
+        "acme",
+        "-t",
+        "python",
+        "--first-notebook-date",
+        "2026-04-01",
+        "-n",
+        "3",
+        "--freq",
+        "weekly",
+    ]
+    main()
+    dest = course_env["tmp_path"] / "acme-python-2026-03"
+    assert (dest / "acme-python-2026-04-01.ipynb").exists()
+    assert (dest / "acme-python-2026-04-08.ipynb").exists()
+    assert (dest / "acme-python-2026-04-15.ipynb").exists()
+
+
+def test_first_notebook_date_invalid_format_rejected(
+    course_env: dict[str, Any],
+) -> None:
+    """--first-notebook-date with invalid format causes SystemExit."""
+    sys.argv = [
+        "setup-course",
+        "-c",
+        "acme",
+        "-t",
+        "python",
+        "--first-notebook-date",
+        "not-a-date",
+    ]
+    with pytest.raises(SystemExit):
+        main()
+
+
+def test_first_notebook_date_default_is_today(course_env: dict[str, Any]) -> None:
+    """Without --first-notebook-date, notebooks start from FAKE_TODAY."""
+    sys.argv = [
+        "setup-course",
+        "-c",
+        "acme",
+        "-t",
+        "python",
+        "-n",
+        "2",
+    ]
+    main()
+    dest = course_env["tmp_path"] / "acme-python-2026-03"
+    assert (dest / "acme-python-2026-03-19.ipynb").exists()
+    assert (dest / "acme-python-2026-03-20.ipynb").exists()
+
+
+def test_first_notebook_date_dry_run(
+    course_env: dict[str, Any],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Dry-run output shows correct dates when --first-notebook-date is used."""
+    sys.argv = [
+        "setup-course",
+        "-c",
+        "acme",
+        "-t",
+        "python",
+        "--first-notebook-date",
+        "2026-04-01",
+        "-n",
+        "3",
+        "--dry-run",
+    ]
+    main()
+    output = capsys.readouterr().out
+    assert "[dry-run]" in output
+    assert "2026-04-01" in output
+    assert "2026-04-02" in output
+    assert "2026-04-03" in output
+
+
+# ---------------------------------------------------------------------------
+# -d/--date validation tests
+# ---------------------------------------------------------------------------
+
+
+def test_date_valid_format_accepted(course_env: dict[str, Any]) -> None:
+    """-d 2026-01 is accepted without error."""
+    sys.argv = ["setup-course", "-c", "acme", "-t", "python", "-d", "2026-01"]
+    main()
+    course_env["user"].create_repo.assert_called_once_with(
+        name="acme-python-2026-01", private=False
+    )
+
+
+def test_date_invalid_format_rejected(course_env: dict[str, Any]) -> None:
+    """-d blah is rejected."""
+    sys.argv = ["setup-course", "-c", "acme", "-t", "python", "-d", "blah"]
+    with pytest.raises(SystemExit):
+        main()
+
+
+def test_date_invalid_month_rejected(course_env: dict[str, Any]) -> None:
+    """-d 2026-13 is rejected (month 13 does not exist)."""
+    sys.argv = ["setup-course", "-c", "acme", "-t", "python", "-d", "2026-13"]
+    with pytest.raises(SystemExit):
+        main()
+
+
+def test_date_invalid_month_zero_rejected(course_env: dict[str, Any]) -> None:
+    """-d 2026-00 is rejected (month 0 does not exist)."""
+    sys.argv = ["setup-course", "-c", "acme", "-t", "python", "-d", "2026-00"]
+    with pytest.raises(SystemExit):
+        main()
+
+
+def test_date_too_far_future_rejected(course_env: dict[str, Any]) -> None:
+    """-d 2029-01 is rejected (more than 2 years ahead of FAKE_TODAY 2026)."""
+    sys.argv = ["setup-course", "-c", "acme", "-t", "python", "-d", "2029-01"]
+    with pytest.raises(SystemExit):
+        main()
+
+
+def test_date_two_years_ahead_accepted(course_env: dict[str, Any]) -> None:
+    """-d 2028-12 is accepted (exactly 2 years ahead of 2026)."""
+    sys.argv = ["setup-course", "-c", "acme", "-t", "python", "-d", "2028-12"]
+    main()
+    course_env["user"].create_repo.assert_called_once_with(
+        name="acme-python-2028-12", private=False
+    )
+
+
+def test_date_past_year_accepted(course_env: dict[str, Any]) -> None:
+    """-d 2020-06 is accepted (past years are fine)."""
+    sys.argv = ["setup-course", "-c", "acme", "-t", "python", "-d", "2020-06"]
+    main()
+    course_env["user"].create_repo.assert_called_once_with(
+        name="acme-python-2020-06", private=False
+    )

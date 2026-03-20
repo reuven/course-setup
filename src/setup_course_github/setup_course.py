@@ -14,6 +14,7 @@ from typing import cast
 from github import Github
 from github.AuthenticatedUser import AuthenticatedUser
 
+from setup_course_github import __version__
 from setup_course_github.config import load_config
 
 EXTRAS_GROUPS: dict[str, list[str]] = {
@@ -117,10 +118,46 @@ def _build_git_config(username: str, repo: str) -> str:
 """
 
 
-def _notebook_dates(start: datetime.date, count: int, freq: str) -> list[datetime.date]:
-    """Return a list of dates for notebook files."""
-    step = datetime.timedelta(days=1 if freq == "daily" else 7)
-    return [start + step * i for i in range(count)]
+def _notebook_dates(
+    start: datetime.date,
+    count: int,
+    freq: str,
+    skip_days: set[int] | None = None,
+) -> list[datetime.date]:
+    """Return a list of dates for notebook files.
+
+    *skip_days* is an optional set of weekday numbers (Mon=0 … Sun=6) that
+    should be skipped.  For daily frequency, days in *skip_days* are simply
+    not counted.  For weekly frequency, if a 7-day jump lands on a skip day
+    the date is advanced to the next non-skip day.
+    """
+
+    def _advance_past_skip(d: datetime.date) -> datetime.date:
+        if skip_days:
+            while d.weekday() in skip_days:
+                d += datetime.timedelta(days=1)
+        return d
+
+    if freq == "daily":
+        dates: list[datetime.date] = []
+        current = _advance_past_skip(start)
+        while len(dates) < count:
+            dates.append(current)
+            current += datetime.timedelta(days=1)
+            current = _advance_past_skip(current)
+        return dates
+    else:
+        # weekly
+        dates = []
+        current = _advance_past_skip(start)
+        for i in range(count):
+            if i == 0:
+                dates.append(current)
+            else:
+                current += datetime.timedelta(days=7)
+                current = _advance_past_skip(current)
+                dates.append(current)
+        return dates
 
 
 def _resolve_group(
@@ -194,7 +231,13 @@ def main() -> None:
     config = load_config()
     extras_groups = {**EXTRAS_GROUPS, **config.custom_extras}
 
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(
+        epilog=f"Version {__version__} — https://pypi.org/project/course-setup/",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument(
+        "--version", action="version", version=f"%(prog)s {__version__}"
+    )
     parser.add_argument("-c", "--client", required=True)
     parser.add_argument("-t", "--topic", required=True)
     parser.add_argument("-d", "--date", default=None, help="YYYY-MM override")
@@ -237,8 +280,49 @@ def main() -> None:
         default=False,
         help="show what would be done without making any changes",
     )
+    parser.add_argument(
+        "--first-notebook-date",
+        default=None,
+        help="start date for notebook files (YYYY-MM-DD); defaults to today",
+    )
+
+    weekend_group = parser.add_mutually_exclusive_group()
+    weekend_group.add_argument(
+        "--skip-weekends",
+        action="store_const",
+        const="standard",
+        dest="weekend",
+        help="skip Saturdays and Sundays when scheduling notebooks",
+    )
+    weekend_group.add_argument(
+        "--skip-israeli-weekends",
+        action="store_const",
+        const="israeli",
+        dest="weekend",
+        help="skip Fridays and Saturdays when scheduling notebooks",
+    )
 
     args = parser.parse_args()
+
+    # Validate -d/--date format and range
+    if args.date is not None:
+        try:
+            parts = args.date.split("-")
+            if len(parts) != 2:
+                raise ValueError("expected YYYY-MM")
+            year = int(parts[0])
+            month = int(parts[1])
+            datetime.date(year, month, 1)  # validates month 1-12
+        except (ValueError, IndexError):
+            parser.error(
+                f"invalid date '{args.date}': expected YYYY-MM with a valid month"
+            )
+        today_for_check = _today()
+        if year > today_for_check.year + 2:
+            parser.error(
+                f"date '{args.date}' is too far in the future "
+                f"(max {today_for_check.year + 2})"
+            )
 
     # Resolve verbose: CLI flag overrides config default
     verbose: bool = args.verbose if args.verbose is not None else config.default_verbose
@@ -284,10 +368,31 @@ def main() -> None:
     repo_name = f"{args.client}-{args.topic}-{date_prefix}"
     destination = repo_name
 
+    # Parse --first-notebook-date if provided
+    notebook_start: datetime.date = today
+    if args.first_notebook_date is not None:
+        try:
+            notebook_start = datetime.date.fromisoformat(args.first_notebook_date)
+        except ValueError:
+            parser.error(
+                f"invalid --first-notebook-date format: '{args.first_notebook_date}' "
+                f"(expected YYYY-MM-DD)"
+            )
+
+    # Resolve weekend skipping: CLI flag overrides config default
+    weekend_mode: str | None = (
+        args.weekend if args.weekend is not None else config.default_weekend
+    )
+    skip_days: set[int] | None = None
+    if weekend_mode == "standard":
+        skip_days = {5, 6}  # Saturday, Sunday
+    elif weekend_mode == "israeli":
+        skip_days = {4, 5}  # Friday, Saturday
+
     # Determine notebook dates
     num_sessions = args.num_sessions if args.num_sessions is not None else 1
     freq = args.freq if args.freq is not None else "daily"
-    dates = _notebook_dates(today, num_sessions, freq)
+    dates = _notebook_dates(notebook_start, num_sessions, freq, skip_days)
 
     template_dir = _get_template_dir()
 

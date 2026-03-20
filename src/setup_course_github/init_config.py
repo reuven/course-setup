@@ -2,6 +2,7 @@ import argparse
 import sys
 from pathlib import Path
 
+from setup_course_github import __version__
 from setup_course_github.config import CONFIG_PATH
 
 CONFIG_TEMPLATE = """\
@@ -66,7 +67,12 @@ def create_config(path: Path = CONFIG_PATH, force: bool = False) -> None:
 
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(
-        description="Create a starter config file for course-setup."
+        description="Create a starter config file for course-setup.",
+        epilog=f"Version {__version__} — https://pypi.org/project/course-setup/",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument(
+        "--version", action="version", version=f"%(prog)s {__version__}"
     )
     parser.add_argument(
         "--force",

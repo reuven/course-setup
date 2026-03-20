@@ -5,8 +5,10 @@ import datetime
 import shutil
 import subprocess
 import sys
+from collections.abc import Callable
+from pathlib import Path
 
-from setup_course_github import get_github
+from setup_course_github import __version__, get_github
 from setup_course_github.config import load_config
 
 
@@ -33,6 +35,20 @@ def parse_repo_name(remote_url: str) -> str:
     return repo_with_git
 
 
+def _confirm_create_dir(
+    dest: Path, confirm: Callable[[str], str] = input
+) -> None:
+    """Prompt the user to create an archive directory if it doesn't exist."""
+    if not dest.exists():
+        answer = confirm(
+            f"Archive directory {dest} does not exist. Create it? [y/N] "
+        )
+        if answer.strip().lower().startswith("y"):
+            dest.mkdir(parents=True, exist_ok=True)
+        else:
+            raise RuntimeError(f"Aborted: archive directory {dest} not created")
+
+
 def retire_course(dirname: str) -> None:
     """Make the GitHub repo private and move the local directory to the archive."""
     config = load_config()
@@ -46,13 +62,20 @@ def retire_course(dirname: str) -> None:
 
     year = datetime.datetime.now().year
     dest = config.archive_path / str(year)
+    _confirm_create_dir(dest)
     shutil.move(dirname, dest)
 
     print(f"Successfully retired {dirname} → {dest}")
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(
+        epilog=f"Version {__version__} — https://pypi.org/project/course-setup/",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument(
+        "--version", action="version", version=f"%(prog)s {__version__}"
+    )
     parser.add_argument(
         "dirnames", nargs="+", help="Path(s) to course directories to retire"
     )

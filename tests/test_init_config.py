@@ -149,3 +149,21 @@ def test_config_template_mentions_extras_group(tmp_path: Path) -> None:
     create_config(config_file)
     content = config_file.read_text()
     assert "extras_group" in content
+
+
+# ---------------------------------------------------------------------------
+# --version flag
+# ---------------------------------------------------------------------------
+
+
+def test_version_flag_prints_version(capsys: pytest.CaptureFixture[str]) -> None:
+    """--version prints the version string and exits cleanly."""
+    from setup_course_github import __version__
+    from setup_course_github.init_config import main
+
+    with pytest.raises(SystemExit) as exc_info:
+        main(["--version"])
+    assert exc_info.value.code == 0
+    captured = capsys.readouterr()
+    output = captured.out + captured.err
+    assert __version__ in output
