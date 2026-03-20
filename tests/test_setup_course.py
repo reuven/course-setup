@@ -50,6 +50,7 @@ def make_mock_config(
     config.default_extras_group = None
     config.custom_extras = {}
     config.default_weekend = default_weekend
+    config.additional_files: list[str] = []
     return config
 
 
@@ -2252,3 +2253,67 @@ def test_date_past_year_accepted(course_env: dict[str, Any]) -> None:
     course_env["user"].create_repo.assert_called_once_with(
         name="acme-python-2020-06", private=False
     )
+
+
+# ---------------------------------------------------------------------------
+# Additional files tests
+# ---------------------------------------------------------------------------
+
+
+def test_additional_file_copied(course_env: dict[str, Any]) -> None:
+    """A file listed in additional_files is copied into the course dir."""
+    tmp_path = course_env["tmp_path"]
+    extra_file = tmp_path / "extra_data.csv"
+    extra_file.write_text("col1,col2\n1,2\n")
+    course_env["config"].additional_files = [str(extra_file)]
+
+    sys.argv = ["setup-course", "-c", "acme", "-t", "python"]
+    main()
+
+    dest = tmp_path / f"acme-python-{FAKE_TODAY.strftime('%Y-%m')}"
+    assert (dest / "extra_data.csv").exists()
+    assert (dest / "extra_data.csv").read_text() == "col1,col2\n1,2\n"
+
+
+def test_additional_directory_copied(course_env: dict[str, Any]) -> None:
+    """A directory listed in additional_files is copied with contents."""
+    tmp_path = course_env["tmp_path"]
+    extra_dir = tmp_path / "solutions"
+    extra_dir.mkdir()
+    (extra_dir / "answer1.py").write_text("print('hello')\n")
+    (extra_dir / "answer2.py").write_text("print('world')\n")
+    course_env["config"].additional_files = [str(extra_dir)]
+
+    sys.argv = ["setup-course", "-c", "acme", "-t", "python"]
+    main()
+
+    dest = tmp_path / f"acme-python-{FAKE_TODAY.strftime('%Y-%m')}"
+    assert (dest / "solutions").is_dir()
+    assert (dest / "solutions" / "answer1.py").read_text() == "print('hello')\n"
+    assert (dest / "solutions" / "answer2.py").read_text() == "print('world')\n"
+
+
+def test_additional_file_missing_raises(course_env: dict[str, Any]) -> None:
+    """A non-existent path in additional_files causes error and rollback."""
+    course_env["config"].additional_files = ["/nonexistent/file.txt"]
+
+    sys.argv = ["setup-course", "-c", "acme", "-t", "python"]
+    with pytest.raises(SystemExit):
+        main()
+
+    # The course directory should have been rolled back
+    tmp_path = course_env["tmp_path"]
+    dest = tmp_path / f"acme-python-{FAKE_TODAY.strftime('%Y-%m')}"
+    assert not dest.exists()
+
+
+def test_no_additional_files_works(course_env: dict[str, Any]) -> None:
+    """Empty additional_files list works fine (existing behavior)."""
+    course_env["config"].additional_files = []
+
+    sys.argv = ["setup-course", "-c", "acme", "-t", "python"]
+    main()
+
+    tmp_path = course_env["tmp_path"]
+    dest = tmp_path / f"acme-python-{FAKE_TODAY.strftime('%Y-%m')}"
+    assert dest.exists()
