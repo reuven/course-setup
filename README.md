@@ -134,13 +134,14 @@ setup-course -c Acme -t python-intro -n 5 --freq weekly # 5 weekly sessions
 retire-course ./Acme-python-intro-2026-03
 ```
 
-| Argument | Description |
-|----------|-------------|
+| Argument / Flag | Description |
+|-----------------|-------------|
 | `DIRNAME...` | One or more course directories to retire |
+| `--keep-public` | Archive without making the GitHub repo private |
 
 This will (for each directory):
 
-1. Make the GitHub repo private
+1. Make the GitHub repo private (unless `--keep-public` is passed)
 2. Move the local directory to your configured archive path under the current year
    (prompts for confirmation if the year directory doesn't exist)
 3. Print a retirement summary showing: notebook count, date range, dependencies,

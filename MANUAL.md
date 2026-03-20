@@ -541,7 +541,7 @@ warning is printed and the remaining cleanup actions still execute.
 #### Synopsis
 
 ```
-retire-course DIRNAME [DIRNAME ...] [--version]
+retire-course DIRNAME [DIRNAME ...] [--keep-public] [--version]
 ```
 
 #### Arguments
@@ -554,6 +554,7 @@ retire-course DIRNAME [DIRNAME ...] [--version]
 
 | Option | Required | Description |
 |--------|----------|-------------|
+| `--keep-public` | No | Archive the course without making the GitHub repo private. Useful for courses (e.g., O'Reilly) where the repo should remain publicly accessible. |
 | `--version` | No | Show the version number, PyPI URL, author, and email, then exit. |
 
 #### What it does
@@ -561,7 +562,8 @@ retire-course DIRNAME [DIRNAME ...] [--version]
 For each directory:
 
 1. **Reads the Git remote URL** from the course directory's `.git/config`.
-2. **Makes the GitHub repository private** via the GitHub API.
+2. **Makes the GitHub repository private** via the GitHub API (unless
+   `--keep-public` is passed, in which case the repo stays public).
 3. **Determines the archive destination** as `{archive_path}/{current_year}/`,
    where `archive_path` is the value from your config file and `current_year`
    is the four-digit year (e.g., `2026`).
@@ -581,7 +583,7 @@ For each directory:
    - Date range extracted from notebook filenames
    - Dependencies from the course `pyproject.toml`
    - Archive location (full path)
-   - GitHub repo URL (now private)
+   - GitHub repo URL (marked "now private" or "still public" depending on `--keep-public`)
 
 If any directory fails, the remaining directories are still processed and all
 errors are reported at the end.
@@ -603,6 +605,14 @@ retire-course ./Acme-2026-03 ./Beta-2026-03 ./Gamma-2026-02
 If your archive path is `/Users/reuven/Courses/Archive`, this moves the
 directory to `/Users/reuven/Courses/Archive/2026/Acme-2026-03-18` and sets
 the GitHub repo to private.
+
+Keep the repo public (e.g., for O'Reilly courses):
+
+```
+retire-course --keep-public ./OReilly-python-2026-03
+```
+
+This archives the directory but leaves the GitHub repo publicly accessible.
 
 #### Requirements
 
