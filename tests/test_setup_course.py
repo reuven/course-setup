@@ -65,6 +65,7 @@ def setup_template(tmp_path: Path) -> Path:
     template.mkdir(parents=True, exist_ok=True)
     (template / "Course notebook.ipynb").write_text('{"cells": []}\n')
     (template / "README.md").write_text("# Course\n")
+    (template / ".gitignore").write_text("# Python\n__pycache__/\n")
     return template
 
 
@@ -2066,3 +2067,16 @@ def test_dry_run_shows_notebook_type(
     main()
     output = capsys.readouterr().out
     assert "Notebook type: marimo" in output
+
+
+def test_gitignore_present_in_course_directory(
+    course_env: dict[str, Any],
+) -> None:
+    """.gitignore is copied into the new course directory."""
+    sys.argv = ["setup-course", "-c", "acme", "-t", "python"]
+    main()
+    course_dir = Path(f"acme-python-{FAKE_TODAY:%Y-%m}")
+    gitignore = course_dir / ".gitignore"
+    assert gitignore.exists(), ".gitignore should be present in the course directory"
+    contents = gitignore.read_text()
+    assert "__pycache__/" in contents
