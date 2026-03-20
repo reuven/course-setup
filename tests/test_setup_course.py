@@ -2252,3 +2252,150 @@ def test_date_past_year_accepted(course_env: dict[str, Any]) -> None:
     course_env["user"].create_repo.assert_called_once_with(
         name="acme-python-2020-06", private=False
     )
+
+
+# ---------------------------------------------------------------------------
+# Weekend skipping – _notebook_dates unit tests
+# ---------------------------------------------------------------------------
+
+
+def test_notebook_dates_skip_standard_weekends() -> None:
+    """Daily with standard skip: Wed Mar 18 start, 5 sessions skips Sat+Sun."""
+    # Mar 18 2026 = Wednesday (weekday 2)
+    start = datetime.date(2026, 3, 18)
+    result = _notebook_dates(start, 5, "daily", {5, 6})
+    assert result == [
+        datetime.date(2026, 3, 18),  # Wed
+        datetime.date(2026, 3, 19),  # Thu
+        datetime.date(2026, 3, 20),  # Fri
+        datetime.date(2026, 3, 23),  # Mon (skip Sat+Sun)
+        datetime.date(2026, 3, 24),  # Tue
+    ]
+
+
+def test_notebook_dates_skip_israeli_weekends() -> None:
+    """Daily with Israeli skip: Wed Mar 18 start, 5 sessions skips Fri+Sat."""
+    start = datetime.date(2026, 3, 18)
+    result = _notebook_dates(start, 5, "daily", {4, 5})
+    assert result == [
+        datetime.date(2026, 3, 18),  # Wed
+        datetime.date(2026, 3, 19),  # Thu
+        datetime.date(2026, 3, 22),  # Sun (skip Fri+Sat)
+        datetime.date(2026, 3, 23),  # Mon
+        datetime.date(2026, 3, 24),  # Tue
+    ]
+
+
+def test_notebook_dates_start_on_skip_day() -> None:
+    """If start date is a Saturday with standard skip, advance to Monday."""
+    # Mar 21 2026 = Saturday (weekday 5)
+    start = datetime.date(2026, 3, 21)
+    result = _notebook_dates(start, 3, "daily", {5, 6})
+    assert result == [
+        datetime.date(2026, 3, 23),  # Mon
+        datetime.date(2026, 3, 24),  # Tue
+        datetime.date(2026, 3, 25),  # Wed
+    ]
+
+
+def test_notebook_dates_weekly_skip_weekends() -> None:
+    """Weekly freq: start on Sat with standard skip advances to Monday."""
+    # Start Sat Mar 21 → advance to Mon Mar 23. +7 = Mon Mar 30. +7 = Mon Apr 6.
+    start = datetime.date(2026, 3, 21)  # Saturday
+    result = _notebook_dates(start, 3, "weekly", {5, 6})
+    assert result == [
+        datetime.date(2026, 3, 23),  # Mon (advanced from Sat)
+        datetime.date(2026, 3, 30),  # Mon (+7)
+        datetime.date(2026, 4, 6),  # Mon (+7)
+    ]
+
+
+def test_skip_weekends_e2e(course_env: dict[str, Any]) -> None:
+    """--skip-weekends with -n 5 generates correct notebook filenames."""
+    # FAKE_TODAY = 2026-03-19 (Thursday)
+    sys.argv = [
+        "setup-course",
+        "-c",
+        "acme",
+        "-t",
+        "python",
+        "-n",
+        "5",
+        "--skip-weekends",
+        "--dry-run",
+    ]
+    main()
+    # Verify the dates are correct by checking _notebook_dates directly
+    dates = _notebook_dates(FAKE_TODAY, 5, "daily", {5, 6})
+    assert dates == [
+        datetime.date(2026, 3, 19),  # Thu
+        datetime.date(2026, 3, 20),  # Fri
+        datetime.date(2026, 3, 23),  # Mon
+        datetime.date(2026, 3, 24),  # Tue
+        datetime.date(2026, 3, 25),  # Wed
+    ]
+
+
+def test_skip_israeli_weekends_e2e(course_env: dict[str, Any]) -> None:
+    """--skip-israeli-weekends with -n 5 generates correct notebook filenames."""
+    sys.argv = [
+        "setup-course",
+        "-c",
+        "acme",
+        "-t",
+        "python",
+        "-n",
+        "5",
+        "--skip-israeli-weekends",
+        "--dry-run",
+    ]
+    main()
+    # Thu Mar 19, Sun Mar 22, Mon Mar 23, Tue Mar 24, Wed Mar 25
+    dates = _notebook_dates(FAKE_TODAY, 5, "daily", {4, 5})
+    assert dates == [
+        datetime.date(2026, 3, 19),  # Thu
+        datetime.date(2026, 3, 22),  # Sun (skip Fri+Sat)
+        datetime.date(2026, 3, 23),  # Mon
+        datetime.date(2026, 3, 24),  # Tue
+        datetime.date(2026, 3, 25),  # Wed
+    ]
+
+
+def test_skip_weekends_mutually_exclusive(course_env: dict[str, Any]) -> None:
+    """Both --skip-weekends and --skip-israeli-weekends together → SystemExit."""
+    sys.argv = [
+        "setup-course",
+        "-c",
+        "acme",
+        "-t",
+        "python",
+        "--skip-weekends",
+        "--skip-israeli-weekends",
+    ]
+    with pytest.raises(SystemExit):
+        main()
+
+
+def test_skip_weekends_config_default(course_env: dict[str, Any]) -> None:
+    """Config default_weekend = 'standard' applies when no CLI flag."""
+    course_env["config"].default_weekend = "standard"
+    sys.argv = [
+        "setup-course",
+        "-c",
+        "acme",
+        "-t",
+        "python",
+        "-n",
+        "5",
+        "--dry-run",
+    ]
+    main()
+    # FAKE_TODAY = Thu Mar 19, standard skip → same as test_skip_weekends_e2e
+    dates = _notebook_dates(FAKE_TODAY, 5, "daily", {5, 6})
+    assert dates == [
+        datetime.date(2026, 3, 19),
+        datetime.date(2026, 3, 20),
+        datetime.date(2026, 3, 23),
+        datetime.date(2026, 3, 24),
+        datetime.date(2026, 3, 25),
+    ]

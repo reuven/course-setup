@@ -6,6 +6,7 @@ from pathlib import Path
 CONFIG_PATH = Path.home() / ".config" / "course-setup" / "config.toml"
 
 VALID_NOTEBOOK_TYPES = {"jupyter", "marimo"}
+VALID_WEEKEND_TYPES = {"standard", "israeli"}
 
 
 class ConfigError(Exception):
@@ -21,6 +22,7 @@ class CourseConfig:
     default_verbose: bool = False
     default_extras_group: str | None = None
     custom_extras: dict[str, list[str]] = field(default_factory=dict)
+    default_weekend: str | None = None
 
 
 def load_config(path: Path = CONFIG_PATH) -> CourseConfig:
@@ -89,6 +91,17 @@ def load_config(path: Path = CONFIG_PATH) -> CourseConfig:
             raise ConfigError(f"extras.{group_name} must be a list of package names")
         custom_extras[group_name] = [str(p) for p in packages]
 
+    # Default weekend: optional, defaults to None
+    raw_weekend: object = defaults_section.get("weekend")
+    default_weekend: str | None = None
+    if raw_weekend is not None:
+        if not isinstance(raw_weekend, str) or raw_weekend not in VALID_WEEKEND_TYPES:
+            valid = ", ".join(sorted(VALID_WEEKEND_TYPES))
+            raise ConfigError(
+                f"Invalid weekend value '{raw_weekend}'. Must be one of: {valid}"
+            )
+        default_weekend = raw_weekend
+
     return CourseConfig(
         github_token=github_token,
         archive_path=archive_path,
@@ -97,4 +110,5 @@ def load_config(path: Path = CONFIG_PATH) -> CourseConfig:
         default_verbose=default_verbose,
         default_extras_group=default_extras_group,
         custom_extras=custom_extras,
+        default_weekend=default_weekend,
     )

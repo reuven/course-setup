@@ -445,3 +445,73 @@ finance = []
     config_file.write_text(toml_content)
     config = load_config(config_file)
     assert config.custom_extras["finance"] == []
+
+
+# ---------------------------------------------------------------------------
+# Default weekend tests
+# ---------------------------------------------------------------------------
+
+WEEKEND_STANDARD_TOML = """
+[github]
+token = "ghp_testtoken"
+
+[paths]
+archive = "/tmp/archive"
+
+[defaults]
+weekend = "standard"
+"""
+
+WEEKEND_ISRAELI_TOML = """
+[github]
+token = "ghp_testtoken"
+
+[paths]
+archive = "/tmp/archive"
+
+[defaults]
+weekend = "israeli"
+"""
+
+WEEKEND_INVALID_TOML = """
+[github]
+token = "ghp_testtoken"
+
+[paths]
+archive = "/tmp/archive"
+
+[defaults]
+weekend = "tuesday"
+"""
+
+
+def test_default_weekend_standard(tmp_path: Path) -> None:
+    """weekend = 'standard' loads correctly."""
+    config_file = tmp_path / "config.toml"
+    config_file.write_text(WEEKEND_STANDARD_TOML)
+    config = load_config(config_file)
+    assert config.default_weekend == "standard"
+
+
+def test_default_weekend_israeli(tmp_path: Path) -> None:
+    """weekend = 'israeli' loads correctly."""
+    config_file = tmp_path / "config.toml"
+    config_file.write_text(WEEKEND_ISRAELI_TOML)
+    config = load_config(config_file)
+    assert config.default_weekend == "israeli"
+
+
+def test_default_weekend_invalid(tmp_path: Path) -> None:
+    """weekend = 'tuesday' raises ConfigError."""
+    config_file = tmp_path / "config.toml"
+    config_file.write_text(WEEKEND_INVALID_TOML)
+    with pytest.raises(ConfigError, match="weekend"):
+        load_config(config_file)
+
+
+def test_default_weekend_defaults_to_none(tmp_path: Path) -> None:
+    """When weekend is not in config, it defaults to None."""
+    config_file = tmp_path / "config.toml"
+    config_file.write_text(MINIMAL_TOML)
+    config = load_config(config_file)
+    assert config.default_weekend is None
