@@ -24,6 +24,7 @@ class CourseConfig:
     custom_extras: dict[str, list[str]] = field(default_factory=dict)
     default_weekend: str | None = None
     additional_files: list[str] = field(default_factory=list)
+    default_private: bool = False
 
 
 def load_config(path: Path = CONFIG_PATH) -> CourseConfig:
@@ -103,6 +104,14 @@ def load_config(path: Path = CONFIG_PATH) -> CourseConfig:
             )
         default_weekend = raw_weekend
 
+    # Default private: optional, defaults to False
+    raw_private: object = defaults_section.get("private", False)
+    if not isinstance(raw_private, bool):
+        raise ConfigError(
+            f"Invalid private value '{raw_private}'. Must be true or false"
+        )
+    default_private: bool = raw_private
+
     # Additional files: optional list of file/directory paths to copy
     raw_additional_files: object = paths_section.get("additional_files", [])
     if not isinstance(raw_additional_files, list):
@@ -119,4 +128,5 @@ def load_config(path: Path = CONFIG_PATH) -> CourseConfig:
         custom_extras=custom_extras,
         default_weekend=default_weekend,
         additional_files=additional_files,
+        default_private=default_private,
     )

@@ -562,3 +562,54 @@ def test_default_weekend_defaults_to_none(tmp_path: Path) -> None:
     config_file.write_text(MINIMAL_TOML)
     config = load_config(config_file)
     assert config.default_weekend is None
+
+
+# ---------------------------------------------------------------------------
+# Default private tests
+# ---------------------------------------------------------------------------
+
+PRIVATE_TRUE_TOML = """
+[github]
+token = "ghp_testtoken"
+
+[paths]
+archive = "/tmp/archive"
+
+[defaults]
+private = true
+"""
+
+PRIVATE_INVALID_TOML = """
+[github]
+token = "ghp_testtoken"
+
+[paths]
+archive = "/tmp/archive"
+
+[defaults]
+private = "yes"
+"""
+
+
+def test_default_private_defaults_to_false(tmp_path: Path) -> None:
+    """When private is not in config, it defaults to False."""
+    config_file = tmp_path / "config.toml"
+    config_file.write_text(MINIMAL_TOML)
+    config = load_config(config_file)
+    assert config.default_private is False
+
+
+def test_default_private_true(tmp_path: Path) -> None:
+    """private = true in config sets default_private to True."""
+    config_file = tmp_path / "config.toml"
+    config_file.write_text(PRIVATE_TRUE_TOML)
+    config = load_config(config_file)
+    assert config.default_private is True
+
+
+def test_default_private_invalid_type_raises(tmp_path: Path) -> None:
+    """Non-boolean private value raises ConfigError."""
+    config_file = tmp_path / "config.toml"
+    config_file.write_text(PRIVATE_INVALID_TOML)
+    with pytest.raises(ConfigError, match="private"):
+        load_config(config_file)
