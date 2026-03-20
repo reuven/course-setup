@@ -28,6 +28,7 @@
     setup-course = "setup_course_github.setup_course:main"
     retire-course = "setup_course_github.retire_course:main"
     setup-course-config = "setup_course_github.init_config:main"
+    unretire-course = "setup_course_github.unretire_course:main"
 
 
 [build-system]
