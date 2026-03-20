@@ -1,11 +1,14 @@
+from importlib.metadata import metadata
+
 from github import Github
 from github.AuthenticatedUser import AuthenticatedUser
 
 from setup_course_github.config import load_config
 
-__version__ = "2.13.1"
-__author__ = "Reuven Lerner"
-__email__ = "reuven@lerner.co.il"
+_meta = metadata("course-setup")
+__version__: str = _meta["Version"] or "0.0.0"
+__author__: str = "Reuven Lerner"
+__email__: str = "reuven@lerner.co.il"
 
 
 def get_github() -> Github:
