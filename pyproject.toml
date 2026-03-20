@@ -1,6 +1,6 @@
 [project]
     name = "course-setup"
-    version = "2.10.0"
+    version = "2.11.0"
     description = "CLI tools for setting up and retiring GitHub-backed course repositories"
     readme = "README.md"
     requires-python = ">=3.13"
