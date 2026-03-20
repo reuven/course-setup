@@ -101,8 +101,16 @@ Run:
 setup-course-config
 ```
 
-This creates the file `~/.config/course-setup/config.toml` with a commented
-template. If the file already exists, the command will refuse to overwrite it
+This creates a `config.toml` file in your platform's standard config directory
+with a commented template. The location depends on your operating system:
+
+| OS | Config path |
+|----|-------------|
+| macOS | `~/Library/Application Support/course-setup/config.toml` |
+| Linux | `~/.config/course-setup/config.toml` |
+| Windows | `%APPDATA%\course-setup\config.toml` |
+
+If the file already exists, the command will refuse to overwrite it
 unless you pass `--force`:
 
 ```
@@ -111,7 +119,7 @@ setup-course-config --force
 
 ### Step 2: Edit the config file
 
-Open `~/.config/course-setup/config.toml` in your editor. It looks like this:
+Open the generated `config.toml` in your editor. It looks like this:
 
 ```toml
 # course-setup configuration file
@@ -756,8 +764,9 @@ setup-course-config [--force] [--version]
 
 #### What it does
 
-Writes a commented template to `~/.config/course-setup/config.toml`. Creates
-the parent directories if they don't exist.
+Writes a commented template to your platform's config directory (see
+[Configuration](#configuration) above for exact paths). Creates the parent
+directories if they don't exist.
 
 ---
 
@@ -775,7 +784,7 @@ the parent directories if they don't exist.
 # One-time setup
 uv tool install course-setup
 setup-course-config
-# Edit ~/.config/course-setup/config.toml with your token, archive path, etc.
+# Edit the generated config.toml with your token, archive path, etc.
 
 # Before each course
 setup-course -c Acme -t python-intro --extras python data
