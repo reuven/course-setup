@@ -37,7 +37,7 @@ def load_config(path: Path = CONFIG_PATH) -> CourseConfig:
             raise ConfigError(
                 f"Config file found at old location: {LEGACY_CONFIG_PATH}\n"
                 f"Please move it to the new location:\n"
-                f"  mv {LEGACY_CONFIG_PATH} {CONFIG_PATH}"
+                f'  mv "{LEGACY_CONFIG_PATH}" "{CONFIG_PATH}"'
             )
         raise ConfigError(
             f"Config file not found: {path}\nRun `setup-course-config` to create it."
