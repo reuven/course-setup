@@ -1935,3 +1935,134 @@ def test_cli_empty_extras_overrides_default_extras_group(
     dest = course_env["tmp_path"] / "acme-python-2026-03"
     content = (dest / "pyproject.toml").read_text()
     assert '"numpy"' not in content
+
+
+# ---------------------------------------------------------------------------
+# Additional QA tests
+# ---------------------------------------------------------------------------
+
+
+def test_rollback_on_uv_sync_failure(
+    course_env: dict[str, Any],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """When uv sync fails, both GitHub repo and local directory are rolled back."""
+    created_repo = MagicMock()
+    course_env["user"].create_repo.return_value = created_repo
+
+    original_side_effect = _fake_subprocess
+
+    def fail_on_uv_sync(*args: Any, **kwargs: Any) -> Any:
+        cmd = args[0] if args else kwargs.get("args", [])
+        if cmd == ["uv", "sync"]:
+            raise RuntimeError("uv sync failed")
+        return original_side_effect(*args, **kwargs)
+
+    course_env["mock_run"].side_effect = fail_on_uv_sync
+
+    sys.argv = ["setup-course", "-c", "acme", "-t", "python"]
+    with pytest.raises(SystemExit, match="1"):
+        main()
+
+    dest = course_env["tmp_path"] / "acme-python-2026-03"
+    assert not dest.exists()
+    created_repo.delete.assert_called_once()
+    output = capsys.readouterr().out
+    assert "Rolling back..." in output
+    assert "Removing GitHub repository..." in output
+    assert "Removing local directory..." in output
+
+
+def test_rollback_on_git_commit_failure(
+    course_env: dict[str, Any],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """When git commit fails, the local directory and GitHub repo are rolled back."""
+    created_repo = MagicMock()
+    course_env["user"].create_repo.return_value = created_repo
+
+    original_side_effect = _fake_subprocess
+
+    def fail_on_commit(*args: Any, **kwargs: Any) -> Any:
+        cmd = args[0] if args else kwargs.get("args", [])
+        if cmd[:2] == ["git", "commit"]:
+            raise RuntimeError("commit failed")
+        return original_side_effect(*args, **kwargs)
+
+    course_env["mock_run"].side_effect = fail_on_commit
+
+    sys.argv = ["setup-course", "-c", "acme", "-t", "python"]
+    with pytest.raises(SystemExit, match="1"):
+        main()
+
+    dest = course_env["tmp_path"] / "acme-python-2026-03"
+    assert not dest.exists()
+    created_repo.delete.assert_called_once()
+    output = capsys.readouterr().out
+    assert "Rolling back..." in output
+    assert "Removing local directory..." in output
+
+
+def test_n_zero_creates_no_notebooks(course_env: dict[str, Any]) -> None:
+    """With -n 0, no notebook files are created (template is deleted)."""
+    sys.argv = ["setup-course", "-c", "acme", "-t", "python", "-n", "0"]
+    main()
+    dest = course_env["tmp_path"] / "acme-python-2026-03"
+    assert not (dest / "Course notebook.ipynb").exists()
+    notebooks = list(dest.glob("*.ipynb")) + list(dest.glob("*.py"))
+    notebook_files = [f for f in notebooks if f.suffix == ".ipynb" or "2026" in f.name]
+    assert len(notebook_files) == 0
+
+
+def test_add_imports_python_only_no_cell(course_env: dict[str, Any]) -> None:
+    """--add-imports with --extras python adds no cell (no imports)."""
+    import json as json_mod
+
+    sys.argv = [
+        "setup-course",
+        "-c",
+        "acme",
+        "-t",
+        "python",
+        "--extras",
+        "python",
+        "--add-imports",
+    ]
+    main()
+    dest = course_env["tmp_path"] / "acme-python-2026-03"
+    nb = json_mod.loads((dest / "acme-python-2026-03-19.ipynb").read_text())
+    assert nb["cells"] == []
+
+
+def test_dry_run_with_default_extras_group(
+    course_env: dict[str, Any],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Dry-run with default_extras_group=data shows data packages."""
+    course_env["config"].default_extras_group = "data"
+    sys.argv = ["setup-course", "-c", "acme", "-t", "python", "--dry-run"]
+    main()
+    output = capsys.readouterr().out
+    assert "[dry-run]" in output
+    assert "numpy" in output
+    assert "pandas" in output
+
+
+def test_dry_run_shows_notebook_type(
+    course_env: dict[str, Any],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Dry-run output includes the notebook type."""
+    sys.argv = [
+        "setup-course",
+        "-c",
+        "acme",
+        "-t",
+        "python",
+        "--notebook-type",
+        "marimo",
+        "--dry-run",
+    ]
+    main()
+    output = capsys.readouterr().out
+    assert "Notebook type: marimo" in output
