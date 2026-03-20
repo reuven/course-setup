@@ -2620,3 +2620,79 @@ def test_dry_run_shows_private(
     main()
     output = capsys.readouterr().out
     assert "private" in output
+
+
+# ---------------------------------------------------------------------------
+# Spaces in filenames / directory names
+# ---------------------------------------------------------------------------
+
+
+def test_client_with_spaces_creates_directory(course_env: dict[str, Any]) -> None:
+    """Client name with spaces creates a directory and repo with that name."""
+    sys.argv = ["setup-course", "-c", "Acme Corp", "-t", "python"]
+    main()
+    dest = course_env["tmp_path"] / "Acme Corp-python-2026-03"
+    assert dest.exists()
+    assert dest.is_dir()
+    course_env["user"].create_repo.assert_called_once_with(
+        name="Acme Corp-python-2026-03", private=False
+    )
+
+
+def test_topic_with_spaces_creates_notebook(course_env: dict[str, Any]) -> None:
+    """Topic with spaces creates a notebook with spaces in the filename."""
+    sys.argv = ["setup-course", "-c", "acme", "-t", "Python Intro"]
+    main()
+    dest = course_env["tmp_path"] / "acme-Python Intro-2026-03"
+    nb = dest / "acme-Python Intro-2026-03-19.ipynb"
+    assert nb.exists()
+
+
+def test_additional_files_with_spaces_in_name(course_env: dict[str, Any]) -> None:
+    """Additional file whose name contains spaces is copied into course dir."""
+    tmp_path = course_env["tmp_path"]
+    extra_file = tmp_path / "my data file.csv"
+    extra_file.write_text("a,b,c\n1,2,3\n")
+    course_env["config"].additional_files = [str(extra_file)]
+
+    sys.argv = ["setup-course", "-c", "acme", "-t", "python"]
+    main()
+
+    dest = tmp_path / "acme-python-2026-03"
+    assert (dest / "my data file.csv").exists()
+
+
+def test_additional_dir_with_spaces_in_name(course_env: dict[str, Any]) -> None:
+    """Additional directory whose name contains spaces is copied into course dir."""
+    tmp_path = course_env["tmp_path"]
+    extra_dir = tmp_path / "my solutions"
+    extra_dir.mkdir()
+    (extra_dir / "solution1.py").write_text("print('hello')\n")
+
+    course_env["config"].additional_files = [str(extra_dir)]
+
+    sys.argv = ["setup-course", "-c", "acme", "-t", "python"]
+    main()
+
+    dest = tmp_path / "acme-python-2026-03"
+    assert (dest / "my solutions").is_dir()
+    assert (dest / "my solutions" / "solution1.py").exists()
+
+
+def test_readme_source_with_spaces_in_path(course_env: dict[str, Any]) -> None:
+    """A custom README at a path with spaces is used correctly."""
+    tmp_path = course_env["tmp_path"]
+    templates_dir = tmp_path / "my templates"
+    templates_dir.mkdir()
+    custom_readme = templates_dir / "README.md"
+    custom_readme.write_text("# Custom Course README\n")
+
+    course_env["config"].readme_source = str(custom_readme)
+
+    sys.argv = ["setup-course", "-c", "acme", "-t", "python"]
+    main()
+
+    dest = tmp_path / "acme-python-2026-03"
+    readme = dest / "README.md"
+    assert readme.exists()
+    assert readme.read_text() == "# Custom Course README\n"

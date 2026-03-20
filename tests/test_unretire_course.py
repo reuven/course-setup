@@ -210,3 +210,37 @@ def test_help_shows_version_and_url(capsys: pytest.CaptureFixture[str]) -> None:
     assert __version__ in output
     assert "https://pypi.org/project/course-setup/" in output
     assert __author__ in output
+
+
+# ---------------------------------------------------------------------------
+# Spaces in directory names
+# ---------------------------------------------------------------------------
+
+
+def test_unretire_dirname_with_spaces() -> None:
+    """unretire_course handles a dirname with spaces correctly."""
+    mock_repo = MagicMock()
+    mock_github = MagicMock()
+    mock_github.get_repo.return_value = mock_repo
+
+    with patch(
+        "setup_course_github.unretire_course.get_remote_url",
+        return_value="git@github.com:user/Acme Corp-python.git",
+    ):
+        with patch(
+            "setup_course_github.unretire_course.get_github",
+            return_value=mock_github,
+        ):
+            with patch("setup_course_github.unretire_course.shutil.move") as mock_move:
+                with patch(
+                    "setup_course_github.unretire_course.Path.cwd",
+                    return_value=Path("/fake/cwd"),
+                ):
+                    with patch(
+                        "setup_course_github.unretire_course.Path.exists",
+                        return_value=False,
+                    ):
+                        unretire_course("/archive/2024/Acme Corp-python")
+
+    dest = mock_move.call_args[0][1]
+    assert dest == str(Path("/fake/cwd/Acme Corp-python"))

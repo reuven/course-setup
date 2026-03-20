@@ -783,3 +783,39 @@ def test_retirement_summary_corrupt_pyproject(tmp_path: Path) -> None:
     summary = _build_retirement_summary(str(course_dir), "user/corrupt-toml", dest)
 
     assert "Dependencies: none" in summary
+
+
+# ---------------------------------------------------------------------------
+# Spaces in directory / repo names
+# ---------------------------------------------------------------------------
+
+
+def test_retire_dirname_with_spaces() -> None:
+    """retire_course works when dirname contains spaces."""
+    mock_repo = MagicMock()
+    mock_github = MagicMock()
+    mock_github.get_repo.return_value = mock_repo
+
+    with patch(
+        "setup_course_github.retire_course.get_remote_url",
+        return_value="git@github.com:user/Acme Corp-python-2026-03.git",
+    ) as mock_get_url:
+        with patch(
+            "setup_course_github.retire_course.get_github", return_value=mock_github
+        ):
+            with patch(
+                "setup_course_github.retire_course.load_config",
+                return_value=FAKE_CONFIG,
+            ):
+                with patch("setup_course_github.retire_course._confirm_create_dir"):
+                    with patch("shutil.move") as mock_move:
+                        retire_course("Acme Corp-python-2026-03")
+
+    mock_get_url.assert_called_once_with("Acme Corp-python-2026-03")
+    assert mock_move.call_args[0][0] == "Acme Corp-python-2026-03"
+
+
+def test_parse_repo_name_with_spaces() -> None:
+    """parse_repo_name handles repo names with spaces."""
+    result = parse_repo_name("git@github.com:user/Acme Corp-python.git")
+    assert result == "user/Acme Corp-python"

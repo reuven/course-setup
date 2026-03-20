@@ -257,3 +257,50 @@ def test_archive_notebook_with_spaces_in_name(tmp_path: Path) -> None:
         capture_output=True,
         check=True,
     )
+
+
+# ---------------------------------------------------------------------------
+# Spaces in directory names
+# ---------------------------------------------------------------------------
+
+
+def test_archive_dirname_with_spaces(tmp_path: Path) -> None:
+    """Archive a directory whose name contains spaces."""
+    course_dir = tmp_path / "My Course"
+    course_dir.mkdir()
+    (course_dir / "notes.txt").write_text("hello")
+    (course_dir / "data.csv").write_text("a,b\n1,2\n")
+
+    zip_path = archive_course(str(course_dir), export_html=False)
+
+    assert zip_path.name == "My Course.zip"
+    assert zip_path.exists()
+    with zipfile.ZipFile(zip_path) as zf:
+        names = zf.namelist()
+        assert "My Course/notes.txt" in names
+        assert "My Course/data.csv" in names
+
+
+def test_archive_excludes_dirs_when_dirname_has_spaces(tmp_path: Path) -> None:
+    """Excluded dirs (.git, .venv, etc.) are still excluded when dirname has spaces."""
+    course_dir = tmp_path / "My Course"
+    course_dir.mkdir()
+    (course_dir / "file.txt").write_text("keep")
+    (course_dir / ".git").mkdir()
+    (course_dir / ".git" / "config").write_text("git")
+    (course_dir / ".venv").mkdir()
+    (course_dir / ".venv" / "pyvenv.cfg").write_text("venv")
+    (course_dir / "__pycache__").mkdir()
+    (course_dir / "__pycache__" / "mod.pyc").write_text("cache")
+    (course_dir / ".ipynb_checkpoints").mkdir()
+    (course_dir / ".ipynb_checkpoints" / "nb.ipynb").write_text("{}")
+
+    zip_path = archive_course(str(course_dir), export_html=False)
+
+    with zipfile.ZipFile(zip_path) as zf:
+        names = zf.namelist()
+        assert "My Course/file.txt" in names
+        assert not any(".git" in n for n in names)
+        assert not any(".venv" in n for n in names)
+        assert not any("__pycache__" in n for n in names)
+        assert not any(".ipynb_checkpoints" in n for n in names)
