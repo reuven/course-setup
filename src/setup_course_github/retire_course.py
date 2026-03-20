@@ -56,7 +56,9 @@ def _is_marimo_notebook(path: Path) -> bool:
     return "import marimo" in text and "marimo.App()" in text
 
 
-def _build_retirement_summary(dirname: str, repo_name: str, dest: Path) -> str:
+def _build_retirement_summary(
+    dirname: str, repo_name: str, dest: Path, *, kept_public: bool = False
+) -> str:
     """Build a human-readable retirement summary for the course.
 
     Must be called while *dirname* still exists on disk (before shutil.move).
@@ -115,13 +117,15 @@ def _build_retirement_summary(dirname: str, repo_name: str, dest: Path) -> str:
         f"  Date range: {date_range}",
         f"  Dependencies: {deps_str}",
         f"  Archived to: {dest / dirpath.name}",
-        f"  GitHub repo: {repo_url} (now private)",
+        f"  GitHub repo: {repo_url} (still public)"
+        if kept_public
+        else f"  GitHub repo: {repo_url} (now private)",
     ]
     return "\n".join(lines)
 
 
-def retire_course(dirname: str) -> None:
-    """Make the GitHub repo private and move the local directory to the archive."""
+def retire_course(dirname: str, keep_public: bool = False) -> None:
+    """Move the local directory to the archive, optionally making the repo private."""
     config = load_config()
 
     remote_url = get_remote_url(dirname)
@@ -129,13 +133,16 @@ def retire_course(dirname: str) -> None:
 
     g = get_github()
     repo = g.get_repo(repo_name)
-    repo.edit(private=True)
+    if not keep_public:
+        repo.edit(private=True)
 
     year = datetime.datetime.now().year
     dest = config.archive_path / str(year)
     _confirm_create_dir(dest)
 
-    summary = _build_retirement_summary(dirname, repo_name, dest)
+    summary = _build_retirement_summary(
+        dirname, repo_name, dest, kept_public=keep_public
+    )
     shutil.move(dirname, dest)
 
     print(f"Successfully retired {dirname} \u2192 {dest}")
@@ -156,6 +163,12 @@ def main() -> None:
         version=f"%(prog)s {__version__}\n{pypi_url}\n{author_line}",
     )
     parser.add_argument(
+        "--keep-public",
+        action="store_true",
+        default=False,
+        help="archive without making the GitHub repo private",
+    )
+    parser.add_argument(
         "dirnames", nargs="+", help="Path(s) to course directories to retire"
     )
     args = parser.parse_args()
@@ -163,7 +176,7 @@ def main() -> None:
     errors: list[tuple[str, str]] = []
     for dirname in args.dirnames:
         try:
-            retire_course(dirname)
+            retire_course(dirname, keep_public=args.keep_public)
         except Exception as e:
             print(f"Error retiring {dirname}: {e}")
             errors.append((dirname, str(e)))

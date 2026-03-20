@@ -339,7 +339,7 @@ def test_main_calls_retire_course(tmp_path: Path) -> None:
         with patch("sys.argv", ["retire-course", str(tmp_path)]):
             main()
 
-    mock_retire.assert_called_once_with(str(tmp_path))
+    mock_retire.assert_called_once_with(str(tmp_path), keep_public=False)
 
 
 def test_main_requires_dirname() -> None:
@@ -358,9 +358,9 @@ def test_main_multiple_dirs(tmp_path: Path) -> None:
         with patch("sys.argv", ["retire-course", dir1, dir2, dir3]):
             main()
     assert mock_retire.call_count == 3
-    mock_retire.assert_any_call(dir1)
-    mock_retire.assert_any_call(dir2)
-    mock_retire.assert_any_call(dir3)
+    mock_retire.assert_any_call(dir1, keep_public=False)
+    mock_retire.assert_any_call(dir2, keep_public=False)
+    mock_retire.assert_any_call(dir3, keep_public=False)
 
 
 def test_main_continues_on_failure(tmp_path: Path) -> None:
@@ -819,3 +819,102 @@ def test_parse_repo_name_with_spaces() -> None:
     """parse_repo_name handles repo names with spaces."""
     result = parse_repo_name("git@github.com:user/Acme Corp-python.git")
     assert result == "user/Acme Corp-python"
+
+
+# ---------------------------------------------------------------------------
+# --keep-public flag
+# ---------------------------------------------------------------------------
+
+
+def test_keep_public_does_not_make_repo_private() -> None:
+    """With keep_public=True, repo.edit(private=True) is NOT called."""
+    mock_repo = MagicMock()
+    mock_github = MagicMock()
+    mock_github.get_repo.return_value = mock_repo
+
+    with patch(
+        "setup_course_github.retire_course.get_remote_url",
+        return_value="git@github.com:user/myrepo.git",
+    ):
+        with patch(
+            "setup_course_github.retire_course.get_github", return_value=mock_github
+        ):
+            with patch(
+                "setup_course_github.retire_course.load_config",
+                return_value=FAKE_CONFIG,
+            ):
+                with patch("setup_course_github.retire_course._confirm_create_dir"):
+                    with patch("shutil.move"):
+                        retire_course("/some/course", keep_public=True)
+
+    mock_repo.edit.assert_not_called()
+
+
+def test_default_makes_repo_private() -> None:
+    """Without keep_public, repo.edit(private=True) IS called."""
+    mock_repo = MagicMock()
+    mock_github = MagicMock()
+    mock_github.get_repo.return_value = mock_repo
+
+    with patch(
+        "setup_course_github.retire_course.get_remote_url",
+        return_value="git@github.com:user/myrepo.git",
+    ):
+        with patch(
+            "setup_course_github.retire_course.get_github", return_value=mock_github
+        ):
+            with patch(
+                "setup_course_github.retire_course.load_config",
+                return_value=FAKE_CONFIG,
+            ):
+                with patch("setup_course_github.retire_course._confirm_create_dir"):
+                    with patch("shutil.move"):
+                        retire_course("/some/course")
+
+    mock_repo.edit.assert_called_once_with(private=True)
+
+
+def test_keep_public_summary_says_still_public(tmp_path: Path) -> None:
+    """Summary says 'still public' when keep_public=True."""
+    from setup_course_github.retire_course import _build_retirement_summary
+
+    course_dir = tmp_path / "mycourse"
+    course_dir.mkdir()
+    dest = tmp_path / "archive" / "2026"
+
+    summary = _build_retirement_summary(
+        str(course_dir), "user/mycourse", dest, kept_public=True
+    )
+    assert "still public" in summary
+    assert "now private" not in summary
+
+
+def test_keep_public_summary_default_says_private(tmp_path: Path) -> None:
+    """Summary says 'now private' by default."""
+    from setup_course_github.retire_course import _build_retirement_summary
+
+    course_dir = tmp_path / "mycourse"
+    course_dir.mkdir()
+    dest = tmp_path / "archive" / "2026"
+
+    summary = _build_retirement_summary(str(course_dir), "user/mycourse", dest)
+    assert "now private" in summary
+    assert "still public" not in summary
+
+
+def test_main_keep_public_flag(tmp_path: Path) -> None:
+    """main() passes keep_public=True when --keep-public is given."""
+    with patch("setup_course_github.retire_course.retire_course") as mock_retire:
+        with patch("sys.argv", ["retire-course", "--keep-public", str(tmp_path)]):
+            main()
+
+    mock_retire.assert_called_once_with(str(tmp_path), keep_public=True)
+
+
+def test_main_no_keep_public_flag(tmp_path: Path) -> None:
+    """main() passes keep_public=False by default."""
+    with patch("setup_course_github.retire_course.retire_course") as mock_retire:
+        with patch("sys.argv", ["retire-course", str(tmp_path)]):
+            main()
+
+    mock_retire.assert_called_once_with(str(tmp_path), keep_public=False)
