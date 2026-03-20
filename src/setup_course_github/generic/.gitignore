@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[oc]
+*.pyo
+
+# Virtual environments
+.venv/
+
+# Distribution
+dist/
+build/
+*.egg-info/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
