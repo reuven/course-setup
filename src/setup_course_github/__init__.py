@@ -4,6 +4,8 @@ from github.AuthenticatedUser import AuthenticatedUser
 from setup_course_github.config import load_config
 
 __version__ = "2.11.0"
+__author__ = "Reuven Lerner"
+__email__ = "reuven@lerner.co.il"
 
 
 def get_github() -> Github:
