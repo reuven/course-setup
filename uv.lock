@@ -75,7 +75,7 @@ wheels = [
 
 [[package]]
 name = "course-setup"
-version = "2.12.1"
+version = "2.14.0"
 source = { editable = "." }
 dependencies = [
     { name = "pygithub" },
