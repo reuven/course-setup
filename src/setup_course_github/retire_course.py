@@ -35,14 +35,10 @@ def parse_repo_name(remote_url: str) -> str:
     return repo_with_git
 
 
-def _confirm_create_dir(
-    dest: Path, confirm: Callable[[str], str] = input
-) -> None:
+def _confirm_create_dir(dest: Path, confirm: Callable[[str], str] = input) -> None:
     """Prompt the user to create an archive directory if it doesn't exist."""
     if not dest.exists():
-        answer = confirm(
-            f"Archive directory {dest} does not exist. Create it? [y/N] "
-        )
+        answer = confirm(f"Archive directory {dest} does not exist. Create it? [y/N] ")
         if answer.strip().lower().startswith("y"):
             dest.mkdir(parents=True, exist_ok=True)
         else:

@@ -438,6 +438,19 @@ def main() -> None:
             else:
                 shutil.copy2(source, str(readme_path))
 
+        # Copy additional files if configured
+        if config.additional_files:
+            _print_status("Copying additional files...")
+            for path_str in config.additional_files:
+                src_path = Path(path_str)
+                if not src_path.exists():
+                    raise FileNotFoundError(f"Additional file not found: {path_str}")
+                _print_verbose(f"  {path_str}", verbose)
+                if src_path.is_dir():
+                    shutil.copytree(str(src_path), f"{destination}/{src_path.name}")
+                else:
+                    shutil.copy2(str(src_path), destination)
+
         # Handle notebook files
         _print_status("Creating notebook files...")
         ipynb_path = Path(f"{destination}/Course notebook.ipynb")

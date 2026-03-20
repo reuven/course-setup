@@ -23,6 +23,7 @@ class CourseConfig:
     default_extras_group: str | None = None
     custom_extras: dict[str, list[str]] = field(default_factory=dict)
     default_weekend: str | None = None
+    additional_files: list[str] = field(default_factory=list)
 
 
 def load_config(path: Path = CONFIG_PATH) -> CourseConfig:
@@ -102,6 +103,12 @@ def load_config(path: Path = CONFIG_PATH) -> CourseConfig:
             )
         default_weekend = raw_weekend
 
+    # Additional files: optional list of file/directory paths to copy
+    raw_additional_files: object = paths_section.get("additional_files", [])
+    if not isinstance(raw_additional_files, list):
+        raise ConfigError("additional_files must be a list of file/directory paths")
+    additional_files: list[str] = [str(f) for f in raw_additional_files]
+
     return CourseConfig(
         github_token=github_token,
         archive_path=archive_path,
@@ -111,4 +118,5 @@ def load_config(path: Path = CONFIG_PATH) -> CourseConfig:
         default_extras_group=default_extras_group,
         custom_extras=custom_extras,
         default_weekend=default_weekend,
+        additional_files=additional_files,
     )

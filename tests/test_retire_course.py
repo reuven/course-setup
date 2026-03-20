@@ -292,8 +292,9 @@ def test_retire_course_passes_dirname_to_get_remote_url() -> None:
                 "setup_course_github.retire_course.load_config",
                 return_value=FAKE_CONFIG,
             ):
-                with patch("shutil.move"):
-                    retire_course("/specific/path/to/course")
+                with patch("setup_course_github.retire_course._confirm_create_dir"):
+                    with patch("shutil.move"):
+                        retire_course("/specific/path/to/course")
 
     mock_get_url.assert_called_once_with("/specific/path/to/course")
 
@@ -317,8 +318,9 @@ def test_retire_course_prints_success_message(
                 "setup_course_github.retire_course.load_config",
                 return_value=FAKE_CONFIG,
             ):
-                with patch("shutil.move"):
-                    retire_course("/my/course")
+                with patch("setup_course_github.retire_course._confirm_create_dir"):
+                    with patch("shutil.move"):
+                        retire_course("/my/course")
 
     captured = capsys.readouterr()
     assert "/my/course" in captured.out

@@ -429,6 +429,53 @@ archive = ""
         load_config(config_file)
 
 
+# ---------------------------------------------------------------------------
+# Additional files tests
+# ---------------------------------------------------------------------------
+
+ADDITIONAL_FILES_TOML = """
+[github]
+token = "ghp_testtoken"
+
+[paths]
+archive = "/tmp/archive"
+additional_files = ["/path/a", "/path/b"]
+"""
+
+ADDITIONAL_FILES_INVALID_TOML = """
+[github]
+token = "ghp_testtoken"
+
+[paths]
+archive = "/tmp/archive"
+additional_files = "not-a-list"
+"""
+
+
+def test_additional_files_loaded(tmp_path: Path) -> None:
+    """Config with additional_files loads the list correctly."""
+    config_file = tmp_path / "config.toml"
+    config_file.write_text(ADDITIONAL_FILES_TOML)
+    config = load_config(config_file)
+    assert config.additional_files == ["/path/a", "/path/b"]
+
+
+def test_additional_files_empty_by_default(tmp_path: Path) -> None:
+    """When no additional_files in config, defaults to empty list."""
+    config_file = tmp_path / "config.toml"
+    config_file.write_text(MINIMAL_TOML)
+    config = load_config(config_file)
+    assert config.additional_files == []
+
+
+def test_additional_files_invalid_type_raises(tmp_path: Path) -> None:
+    """Non-list additional_files raises ConfigError."""
+    config_file = tmp_path / "config.toml"
+    config_file.write_text(ADDITIONAL_FILES_INVALID_TOML)
+    with pytest.raises(ConfigError, match="additional_files"):
+        load_config(config_file)
+
+
 def test_custom_extras_empty_list(tmp_path: Path) -> None:
     """Config with finance = [] under [extras] loads with empty list."""
     toml_content = """

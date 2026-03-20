@@ -27,6 +27,10 @@ archive = "/path/to/your/archive"
 #   readme_source = "https://example.com/my-readme.md"
 # readme_source = ""
 
+# Optional: additional files or directories to copy into every new course.
+# Examples: data files, exercise notebooks, solutions folder
+# additional_files = ["/path/to/exercises", "/path/to/data.csv"]
+
 [defaults]
 # Default notebook type when running setup-course.
 # Options: "jupyter" or "marimo"
