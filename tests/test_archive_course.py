@@ -53,8 +53,9 @@ def test_archive_html_export(tmp_path: Path) -> None:
         archive_course(str(course_dir), export_html=True)
 
     mock_run.assert_called_once_with(
-        ["uv", "run", "jupyter", "nbconvert", "--to", "html", str(nb_file)],
+        ["uv", "run", "jupyter", "nbconvert", "--to", "html", "lesson.ipynb"],
         cwd=str(course_dir),
+        capture_output=True,
         check=True,
     )
 
@@ -153,3 +154,106 @@ def test_archive_nonexistent_dir_fails(tmp_path: Path) -> None:
     nonexistent = str(tmp_path / "does_not_exist")
     with pytest.raises(FileNotFoundError, match="Directory not found"):
         archive_course(nonexistent)
+
+
+# ---------------------------------------------------------------------------
+# Error handling and exclusion tests
+# ---------------------------------------------------------------------------
+
+
+def test_archive_excludes_git_and_venv(tmp_path: Path) -> None:
+    """Zip excludes .git, .venv, __pycache__, .ipynb_checkpoints."""
+    course_dir = tmp_path / "mycourse"
+    course_dir.mkdir()
+    (course_dir / "file.txt").write_text("keep")
+    (course_dir / ".git").mkdir()
+    (course_dir / ".git" / "config").write_text("git")
+    (course_dir / ".venv").mkdir()
+    (course_dir / ".venv" / "bin").mkdir()
+    (course_dir / ".venv" / "bin" / "python").write_text("py")
+    (course_dir / "__pycache__").mkdir()
+    (course_dir / "__pycache__" / "mod.pyc").write_text("cache")
+    (course_dir / ".ipynb_checkpoints").mkdir()
+    (course_dir / ".ipynb_checkpoints" / "nb.ipynb").write_text("{}")
+
+    zip_path = archive_course(str(course_dir), export_html=False)
+
+    with zipfile.ZipFile(zip_path) as zf:
+        names = zf.namelist()
+        assert "mycourse/file.txt" in names
+        assert not any(".git" in n for n in names)
+        assert not any(".venv" in n for n in names)
+        assert not any("__pycache__" in n for n in names)
+        assert not any(".ipynb_checkpoints" in n for n in names)
+
+
+def test_archive_html_export_failure_continues(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """When nbconvert fails, a warning is printed but archive still completes."""
+    import subprocess as sp
+
+    course_dir = tmp_path / "mycourse"
+    course_dir.mkdir()
+    (course_dir / "lesson.ipynb").write_text('{"cells": []}')
+
+    def fail_nbconvert(*args: object, **kwargs: object) -> None:
+        raise sp.CalledProcessError(1, "nbconvert", stderr=b"conversion error")
+
+    with patch(
+        "setup_course_github.archive_course.subprocess.run", side_effect=fail_nbconvert
+    ):
+        zip_path = archive_course(str(course_dir), export_html=True)
+
+    assert zip_path.exists()
+    output = capsys.readouterr().out
+    assert "Warning" in output
+
+
+def test_archive_html_export_jupyter_not_found(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """When jupyter is not installed, a warning is printed but archive completes."""
+    course_dir = tmp_path / "mycourse"
+    course_dir.mkdir()
+    (course_dir / "lesson.ipynb").write_text('{"cells": []}')
+
+    def raise_not_found(*args: object, **kwargs: object) -> None:
+        raise FileNotFoundError("No such file or directory: 'uv'")
+
+    with patch(
+        "setup_course_github.archive_course.subprocess.run", side_effect=raise_not_found
+    ):
+        zip_path = archive_course(str(course_dir), export_html=True)
+
+    assert zip_path.exists()
+    output = capsys.readouterr().out
+    assert "jupyter nbconvert not found" in output
+
+
+def test_archive_notebook_with_spaces_in_name(tmp_path: Path) -> None:
+    """Notebooks with spaces in filenames are handled correctly."""
+    course_dir = tmp_path / "mycourse"
+    course_dir.mkdir()
+    nb_file = course_dir / "My Notebook - Day 1.ipynb"
+    nb_file.write_text('{"cells": []}')
+
+    mock_run = MagicMock()
+    with patch("setup_course_github.archive_course.subprocess.run", mock_run):
+        archive_course(str(course_dir), export_html=True)
+
+    # Should pass relative path, not absolute
+    mock_run.assert_called_once_with(
+        [
+            "uv",
+            "run",
+            "jupyter",
+            "nbconvert",
+            "--to",
+            "html",
+            "My Notebook - Day 1.ipynb",
+        ],
+        cwd=str(course_dir),
+        capture_output=True,
+        check=True,
+    )

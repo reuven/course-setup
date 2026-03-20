@@ -8,6 +8,28 @@ from pathlib import Path
 from setup_course_github import __author__, __email__, __version__
 
 
+def _export_notebook_to_html(nb_path: Path, course_path: Path) -> bool:
+    """Export a single notebook to HTML. Returns True on success."""
+    # Use the notebook's relative path from the course dir so nbconvert
+    # can find it regardless of spaces in the name.
+    relative = nb_path.relative_to(course_path)
+    try:
+        subprocess.run(
+            ["uv", "run", "jupyter", "nbconvert", "--to", "html", str(relative)],
+            cwd=str(course_path),
+            capture_output=True,
+            check=True,
+        )
+        return True
+    except subprocess.CalledProcessError as exc:
+        stderr = exc.stderr.decode() if exc.stderr else ""
+        print(f"  Warning: failed to export {nb_path.name}: {stderr.strip()}")
+        return False
+    except FileNotFoundError:
+        print("  Warning: jupyter nbconvert not found, skipping HTML export")
+        return False
+
+
 def archive_course(
     dirname: str,
     output: str | None = None,
@@ -21,17 +43,20 @@ def archive_course(
     if not course_path.is_dir():
         raise FileNotFoundError(f"Directory not found: {dirname}")
 
-    # Find all notebooks
-    notebooks = sorted(course_path.rglob("*.ipynb"))
+    # Find all notebooks (skip .ipynb_checkpoints)
+    notebooks = sorted(
+        nb
+        for nb in course_path.rglob("*.ipynb")
+        if ".ipynb_checkpoints" not in nb.parts
+    )
 
     # Export notebooks to HTML if requested
+    html_exported = 0
     if export_html and notebooks:
+        print("Exporting notebooks to HTML...")
         for nb_path in notebooks:
-            subprocess.run(
-                ["uv", "run", "jupyter", "nbconvert", "--to", "html", str(nb_path)],
-                cwd=dirname,
-                check=True,
-            )
+            if _export_notebook_to_html(nb_path, course_path):
+                html_exported += 1
 
     # Determine output path
     if output is not None:
@@ -39,11 +64,16 @@ def archive_course(
     else:
         zip_path = Path(f"{course_path.name}.zip")
 
+    # Directories to exclude from the zip
+    exclude_dirs = {".git", ".venv", "__pycache__", ".ipynb_checkpoints"}
+
     # Create zip file
     parent = course_path.parent
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
         for file_path in sorted(course_path.rglob("*")):
-            if file_path.is_file():
+            if file_path.is_file() and not (
+                set(file_path.relative_to(course_path).parts) & exclude_dirs
+            ):
                 arcname = file_path.relative_to(parent)
                 zf.write(file_path, arcname)
 
@@ -52,20 +82,27 @@ def archive_course(
         file_count = len(zf.namelist())
 
     zip_size = zip_path.stat().st_size
+    size_str = (
+        f"{zip_size / 1024:.1f} KB"
+        if zip_size < 1024 * 1024
+        else f"{zip_size / (1024 * 1024):.1f} MB"
+    )
 
     # Print summary
     print(f"Archive created: {zip_path}")
     print(f"Files: {file_count}")
-    print(f"Size: {zip_size} bytes")
+    print(f"Size: {size_str}")
 
     if notebooks:
         print("Notebooks:")
         for nb in notebooks:
-            html_name = nb.with_suffix(".html").name
-            if export_html:
-                print(f"  {nb.name} -> {html_name}")
+            html_path = nb.with_suffix(".html")
+            if export_html and html_path.exists():
+                print(f"  {nb.name} + {html_path.name}")
             else:
                 print(f"  {nb.name}")
+    if export_html and html_exported > 0:
+        print(f"HTML exports: {html_exported}")
 
     return zip_path
 
