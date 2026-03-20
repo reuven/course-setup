@@ -2,7 +2,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from setup_course_github import __version__
+from setup_course_github import __author__, __email__, __version__
 from setup_course_github.config import CONFIG_PATH
 
 CONFIG_TEMPLATE = """\
@@ -46,6 +46,9 @@ notebook_type = "jupyter"
 # Example: extras_group = "python"
 # extras_group = ""
 
+# Whether to create private GitHub repos by default.
+# private = false
+
 # [extras]
 # Define custom dependency groups for --extras.
 # These merge with built-in groups (python, data, viz, geo, db, ml).
@@ -70,13 +73,18 @@ def create_config(path: Path = CONFIG_PATH, force: bool = False) -> None:
 
 
 def main(argv: list[str] | None = None) -> None:
+    pypi_url = "https://pypi.org/project/course-setup/"
+    author_line = f"{__author__} <{__email__}>"
+
     parser = argparse.ArgumentParser(
         description="Create a starter config file for course-setup.",
-        epilog=f"Version {__version__} — https://pypi.org/project/course-setup/",
+        epilog=f"Version {__version__} — {pypi_url}\n{author_line}",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument(
-        "--version", action="version", version=f"%(prog)s {__version__}"
+        "--version",
+        action="version",
+        version=f"%(prog)s {__version__}\n{pypi_url}\n{author_line}",
     )
     parser.add_argument(
         "--force",

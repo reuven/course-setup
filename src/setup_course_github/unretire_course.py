@@ -4,7 +4,7 @@ import argparse
 import shutil
 from pathlib import Path
 
-from setup_course_github import __version__, get_github
+from setup_course_github import __author__, __email__, __version__, get_github
 from setup_course_github.retire_course import get_remote_url, parse_repo_name
 
 
@@ -27,12 +27,17 @@ def unretire_course(dirname: str) -> None:
 
 
 def main() -> None:
+    pypi_url = "https://pypi.org/project/course-setup/"
+    author_line = f"{__author__} <{__email__}>"
+
     parser = argparse.ArgumentParser(
-        epilog=f"Version {__version__} — https://pypi.org/project/course-setup/",
+        epilog=f"Version {__version__} — {pypi_url}\n{author_line}",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument(
-        "--version", action="version", version=f"%(prog)s {__version__}"
+        "--version",
+        action="version",
+        version=f"%(prog)s {__version__}\n{pypi_url}\n{author_line}",
     )
     parser.add_argument("dirname", help="Path to the course directory to unretire")
     args = parser.parse_args()

@@ -157,8 +157,8 @@ def test_config_template_mentions_extras_group(tmp_path: Path) -> None:
 
 
 def test_version_flag_prints_version(capsys: pytest.CaptureFixture[str]) -> None:
-    """--version prints the version string and exits cleanly."""
-    from setup_course_github import __version__
+    """--version prints the version, PyPI URL, and author info."""
+    from setup_course_github import __author__, __email__, __version__
     from setup_course_github.init_config import main
 
     with pytest.raises(SystemExit) as exc_info:
@@ -167,3 +167,21 @@ def test_version_flag_prints_version(capsys: pytest.CaptureFixture[str]) -> None
     captured = capsys.readouterr()
     output = captured.out + captured.err
     assert __version__ in output
+    assert "https://pypi.org/project/course-setup/" in output
+    assert __author__ in output
+    assert __email__ in output
+
+
+def test_help_shows_version_and_url(capsys: pytest.CaptureFixture[str]) -> None:
+    """--help output contains version, PyPI URL, and author name."""
+    from setup_course_github import __author__, __version__
+    from setup_course_github.init_config import main
+
+    with pytest.raises(SystemExit) as exc_info:
+        main(["--help"])
+    assert exc_info.value.code == 0
+    captured = capsys.readouterr()
+    output = captured.out + captured.err
+    assert __version__ in output
+    assert "https://pypi.org/project/course-setup/" in output
+    assert __author__ in output

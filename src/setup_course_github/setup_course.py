@@ -14,7 +14,7 @@ from typing import cast
 from github import Github
 from github.AuthenticatedUser import AuthenticatedUser
 
-from setup_course_github import __version__
+from setup_course_github import __author__, __email__, __version__
 from setup_course_github.config import load_config
 
 EXTRAS_GROUPS: dict[str, list[str]] = {
@@ -231,12 +231,17 @@ def main() -> None:
     config = load_config()
     extras_groups = {**EXTRAS_GROUPS, **config.custom_extras}
 
+    pypi_url = "https://pypi.org/project/course-setup/"
+    author_line = f"{__author__} <{__email__}>"
+
     parser = argparse.ArgumentParser(
-        epilog=f"Version {__version__} — https://pypi.org/project/course-setup/",
+        epilog=f"Version {__version__} — {pypi_url}\n{author_line}",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument(
-        "--version", action="version", version=f"%(prog)s {__version__}"
+        "--version",
+        action="version",
+        version=f"%(prog)s {__version__}\n{pypi_url}\n{author_line}",
     )
     parser.add_argument("-c", "--client", required=True)
     parser.add_argument("-t", "--topic", required=True)
@@ -286,6 +291,13 @@ def main() -> None:
         help="start date for notebook files (YYYY-MM-DD); defaults to today",
     )
 
+    parser.add_argument(
+        "--private",
+        action="store_true",
+        default=None,
+        help="create the GitHub repo as private instead of public",
+    )
+
     weekend_group = parser.add_mutually_exclusive_group()
     weekend_group.add_argument(
         "--skip-weekends",
@@ -326,6 +338,9 @@ def main() -> None:
 
     # Resolve verbose: CLI flag overrides config default
     verbose: bool = args.verbose if args.verbose is not None else config.default_verbose
+
+    # Resolve private: CLI flag overrides config default
+    private: bool = args.private if args.private is not None else config.default_private
 
     # Validate -n / --freq interaction
     if args.freq is not None and args.num_sessions is None:
@@ -411,7 +426,10 @@ def main() -> None:
         if extra_packages:
             deps.extend(extra_packages)
         _print_status(f"  Dependencies: {', '.join(deps)}")
-        _print_status(f"  GitHub repo: <your-github-username>/{repo_name}")
+        visibility = "private" if private else "public"
+        _print_status(
+            f"  GitHub repo: <your-github-username>/{repo_name} ({visibility})"
+        )
         return
 
     cleanup_actions: list[tuple[str, Callable[[], None]]] = []
@@ -535,7 +553,8 @@ if __name__ == "__main__":
             outfile.write(git_config_content)
 
         # Create the repo on GitHub
-        created_repo = user.create_repo(name=repo_name, private=False)
+        _print_verbose(f"  Visibility: {'private' if private else 'public'}", verbose)
+        created_repo = user.create_repo(name=repo_name, private=private)
         cleanup_actions.append(("GitHub repository", lambda: created_repo.delete()))
 
         # Initial commit and push

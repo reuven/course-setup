@@ -6,6 +6,7 @@ import pytest
 
 from setup_course_github.config import CourseConfig
 from setup_course_github.retire_course import (
+    _build_retirement_summary,
     _confirm_create_dir,
     get_remote_url,
     main,
@@ -523,8 +524,8 @@ def test_main_prints_error_to_stdout(
 
 
 def test_version_flag_prints_version(capsys: pytest.CaptureFixture[str]) -> None:
-    """--version prints the version string and exits cleanly."""
-    from setup_course_github import __version__
+    """--version prints the version, PyPI URL, and author info."""
+    from setup_course_github import __author__, __email__, __version__
 
     with patch("sys.argv", ["retire-course", "--version"]):
         with pytest.raises(SystemExit) as exc_info:
@@ -533,6 +534,24 @@ def test_version_flag_prints_version(capsys: pytest.CaptureFixture[str]) -> None
     captured = capsys.readouterr()
     output = captured.out + captured.err
     assert __version__ in output
+    assert "https://pypi.org/project/course-setup/" in output
+    assert __author__ in output
+    assert __email__ in output
+
+
+def test_help_shows_version_and_url(capsys: pytest.CaptureFixture[str]) -> None:
+    """--help output contains version, PyPI URL, and author name."""
+    from setup_course_github import __author__, __version__
+
+    with patch("sys.argv", ["retire-course", "--help"]):
+        with pytest.raises(SystemExit) as exc_info:
+            main()
+    assert exc_info.value.code == 0
+    captured = capsys.readouterr()
+    output = captured.out + captured.err
+    assert __version__ in output
+    assert "https://pypi.org/project/course-setup/" in output
+    assert __author__ in output
 
 
 # ---------------------------------------------------------------------------
@@ -596,3 +615,171 @@ def test_confirm_create_dir_creates_nested(tmp_path: Path) -> None:
     _confirm_create_dir(nested_dir, confirm=mock_confirm)
 
     assert nested_dir.exists()
+
+
+# ---------------------------------------------------------------------------
+# _build_retirement_summary
+# ---------------------------------------------------------------------------
+
+
+def test_retirement_summary_printed(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """retire_course prints a Retirement Summary with count and path."""
+    course_dir = tmp_path / "mycourse"
+    course_dir.mkdir()
+    # Create a notebook so the summary has something to count
+    (course_dir / "Lecture-2026-03-19.ipynb").write_text("{}")
+
+    mock_repo = MagicMock()
+    mock_github = MagicMock()
+    mock_github.get_repo.return_value = mock_repo
+
+    year = datetime.datetime.now().year
+    archive_config = CourseConfig(
+        github_token="tok",
+        archive_path=tmp_path / "archive",
+        default_notebook_type="jupyter",
+    )
+    archive_dest = tmp_path / "archive" / str(year)
+    archive_dest.mkdir(parents=True)
+
+    with patch(
+        "setup_course_github.retire_course.get_remote_url",
+        return_value="git@github.com:user/mycourse.git",
+    ):
+        with patch(
+            "setup_course_github.retire_course.get_github", return_value=mock_github
+        ):
+            with patch(
+                "setup_course_github.retire_course.load_config",
+                return_value=archive_config,
+            ):
+                with patch("setup_course_github.retire_course._confirm_create_dir"):
+                    with patch("shutil.move"):
+                        retire_course(str(course_dir))
+
+    captured = capsys.readouterr()
+    assert "Retirement Summary" in captured.out
+    assert "Notebooks:" in captured.out
+    assert str(archive_dest / "mycourse") in captured.out
+
+
+def test_retirement_summary_with_notebooks(tmp_path: Path) -> None:
+    """_build_retirement_summary counts notebooks and extracts date range."""
+    course_dir = tmp_path / "python-course"
+    course_dir.mkdir()
+    # Create fake notebook files with date patterns
+    (course_dir / "Lecture-2026-03-19.ipynb").write_text("{}")
+    (course_dir / "Lecture-2026-03-20.ipynb").write_text("{}")
+    (course_dir / "Lecture-2026-03-23.ipynb").write_text("{}")
+    # Create a pyproject.toml with dependencies
+    toml = (
+        '[project]\nname = "test"\n'
+        'dependencies = ["jupyter", "numpy>=1.21", "pandas"]\n'
+    )
+    (course_dir / "pyproject.toml").write_text(toml)
+
+    dest = tmp_path / "archive" / "2026"
+    summary = _build_retirement_summary(str(course_dir), "user/python-course", dest)
+
+    assert "Notebooks: 3 (.ipynb)" in summary
+    assert "2026-03-19" in summary
+    assert "2026-03-23" in summary
+    assert "jupyter" in summary
+    assert "numpy" in summary
+    assert "pandas" in summary
+
+
+def test_retirement_summary_no_notebooks(tmp_path: Path) -> None:
+    """Directory with no notebooks shows 0 in summary."""
+    course_dir = tmp_path / "empty-course"
+    course_dir.mkdir()
+
+    dest = tmp_path / "archive" / "2026"
+    summary = _build_retirement_summary(str(course_dir), "user/empty-course", dest)
+
+    assert "Notebooks: 0" in summary
+
+
+def test_retirement_summary_no_pyproject(tmp_path: Path) -> None:
+    """Directory with no pyproject.toml still produces a valid summary."""
+    course_dir = tmp_path / "no-pyproject"
+    course_dir.mkdir()
+    (course_dir / "Lecture-2026-03-19.ipynb").write_text("{}")
+
+    dest = tmp_path / "archive" / "2026"
+    summary = _build_retirement_summary(str(course_dir), "user/no-pyproject", dest)
+
+    assert "Retirement Summary" in summary
+    assert "Dependencies: none" in summary
+    assert "Notebooks: 1" in summary
+
+
+def test_retirement_summary_marimo_notebooks(tmp_path: Path) -> None:
+    """Marimo .py notebooks are counted correctly."""
+    course_dir = tmp_path / "marimo-course"
+    course_dir.mkdir()
+    marimo_content = (
+        "import marimo\n\napp = marimo.App()\n\n@app.cell\ndef _():\n    pass\n"
+    )
+    (course_dir / "Lecture-2026-03-19.py").write_text(marimo_content)
+    (course_dir / "Lecture-2026-03-20.py").write_text(marimo_content)
+
+    dest = tmp_path / "archive" / "2026"
+    summary = _build_retirement_summary(str(course_dir), "user/marimo-course", dest)
+
+    assert "Notebooks: 2 (marimo .py)" in summary
+    assert "2026-03-19" in summary
+    assert "2026-03-20" in summary
+
+
+def test_retirement_summary_mixed_notebooks(tmp_path: Path) -> None:
+    """Both .ipynb and marimo .py notebooks are counted together."""
+    course_dir = tmp_path / "mixed-course"
+    course_dir.mkdir()
+    (course_dir / "Lecture-2026-03-19.ipynb").write_text("{}")
+    marimo_content = "import marimo\n\napp = marimo.App()\n"
+    (course_dir / "Lecture-2026-03-20.py").write_text(marimo_content)
+
+    dest = tmp_path / "archive" / "2026"
+    summary = _build_retirement_summary(str(course_dir), "user/mixed-course", dest)
+
+    assert "Notebooks: 2 (.ipynb + marimo .py)" in summary
+
+
+def test_retirement_summary_non_marimo_py_not_counted(tmp_path: Path) -> None:
+    """Regular .py files (not marimo) should not be counted as notebooks."""
+    course_dir = tmp_path / "regular-py"
+    course_dir.mkdir()
+    (course_dir / "helper-2026-03-19.py").write_text("print('hello')\n")
+
+    dest = tmp_path / "archive" / "2026"
+    summary = _build_retirement_summary(str(course_dir), "user/regular-py", dest)
+
+    assert "Notebooks: 0" in summary
+
+
+def test_retirement_summary_unreadable_py_file(tmp_path: Path) -> None:
+    """A .py file that cannot be read is not counted as a notebook."""
+    course_dir = tmp_path / "bad-py"
+    course_dir.mkdir()
+    bad_file = course_dir / "Lecture-2026-03-19.py"
+    bad_file.write_bytes(b"\x80\x81\x82\x83")  # invalid UTF-8
+
+    dest = tmp_path / "archive" / "2026"
+    summary = _build_retirement_summary(str(course_dir), "user/bad-py", dest)
+
+    assert "Notebooks: 0" in summary
+
+
+def test_retirement_summary_corrupt_pyproject(tmp_path: Path) -> None:
+    """A corrupt pyproject.toml results in 'none' for dependencies."""
+    course_dir = tmp_path / "corrupt-toml"
+    course_dir.mkdir()
+    (course_dir / "pyproject.toml").write_text("this is not valid toml [[[[")
+
+    dest = tmp_path / "archive" / "2026"
+    summary = _build_retirement_summary(str(course_dir), "user/corrupt-toml", dest)
+
+    assert "Dependencies: none" in summary

@@ -174,3 +174,39 @@ def test_unretire_main_requires_dirname() -> None:
     with patch("sys.argv", ["unretire-course"]):
         with pytest.raises(SystemExit):
             main()
+
+
+# ---------------------------------------------------------------------------
+# --version flag
+# ---------------------------------------------------------------------------
+
+
+def test_version_flag_prints_version(capsys: pytest.CaptureFixture[str]) -> None:
+    """--version prints the version, PyPI URL, and author info."""
+    from setup_course_github import __author__, __email__, __version__
+
+    with patch("sys.argv", ["unretire-course", "--version"]):
+        with pytest.raises(SystemExit) as exc_info:
+            main()
+    assert exc_info.value.code == 0
+    captured = capsys.readouterr()
+    output = captured.out + captured.err
+    assert __version__ in output
+    assert "https://pypi.org/project/course-setup/" in output
+    assert __author__ in output
+    assert __email__ in output
+
+
+def test_help_shows_version_and_url(capsys: pytest.CaptureFixture[str]) -> None:
+    """--help output contains version, PyPI URL, and author name."""
+    from setup_course_github import __author__, __version__
+
+    with patch("sys.argv", ["unretire-course", "--help"]):
+        with pytest.raises(SystemExit) as exc_info:
+            main()
+    assert exc_info.value.code == 0
+    captured = capsys.readouterr()
+    output = captured.out + captured.err
+    assert __version__ in output
+    assert "https://pypi.org/project/course-setup/" in output
+    assert __author__ in output

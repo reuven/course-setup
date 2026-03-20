@@ -40,6 +40,7 @@ def make_mock_config(
     default_notebook_type: str = "jupyter",
     readme_source: str | None = None,
     default_weekend: str | None = None,
+    default_private: bool = False,
 ) -> MagicMock:
     """Return a mock CourseConfig with sensible defaults."""
     config = MagicMock()
@@ -51,6 +52,7 @@ def make_mock_config(
     config.custom_extras = {}
     config.default_weekend = default_weekend
     config.additional_files: list[str] = []
+    config.default_private = default_private
     return config
 
 
@@ -2078,8 +2080,8 @@ def test_dry_run_shows_notebook_type(
 
 
 def test_version_flag_prints_version(capsys: pytest.CaptureFixture[str]) -> None:
-    """--version prints the version string and exits cleanly."""
-    from setup_course_github import __version__
+    """--version prints the version, PyPI URL, and author info."""
+    from setup_course_github import __author__, __email__, __version__
 
     with patch("sys.argv", ["setup-course", "--version"]):
         with pytest.raises(SystemExit) as exc_info:
@@ -2088,6 +2090,24 @@ def test_version_flag_prints_version(capsys: pytest.CaptureFixture[str]) -> None
     captured = capsys.readouterr()
     output = captured.out + captured.err
     assert __version__ in output
+    assert "https://pypi.org/project/course-setup/" in output
+    assert __author__ in output
+    assert __email__ in output
+
+
+def test_help_shows_version_and_url(capsys: pytest.CaptureFixture[str]) -> None:
+    """--help output contains version, PyPI URL, and author name."""
+    from setup_course_github import __author__, __version__
+
+    with patch("sys.argv", ["setup-course", "--help"]):
+        with pytest.raises(SystemExit) as exc_info:
+            main()
+    assert exc_info.value.code == 0
+    captured = capsys.readouterr()
+    output = captured.out + captured.err
+    assert __version__ in output
+    assert "https://pypi.org/project/course-setup/" in output
+    assert __author__ in output
 
 
 # ---------------------------------------------------------------------------
@@ -2478,3 +2498,125 @@ def test_no_additional_files_works(course_env: dict[str, Any]) -> None:
     tmp_path = course_env["tmp_path"]
     dest = tmp_path / f"acme-python-{FAKE_TODAY.strftime('%Y-%m')}"
     assert dest.exists()
+
+
+# ---------------------------------------------------------------------------
+# Private flag tests
+# ---------------------------------------------------------------------------
+
+
+def test_private_flag_creates_private_repo(course_env: dict[str, Any]) -> None:
+    """--private flag creates a private GitHub repo."""
+    sys.argv = ["setup-course", "-c", "acme", "-t", "python", "--private"]
+    main()
+    course_env["user"].create_repo.assert_called_once_with(
+        name="acme-python-2026-03", private=True
+    )
+
+
+def test_no_private_flag_creates_public_repo(course_env: dict[str, Any]) -> None:
+    """Without --private, repo is created as public."""
+    sys.argv = ["setup-course", "-c", "acme", "-t", "python"]
+    main()
+    course_env["user"].create_repo.assert_called_once_with(
+        name="acme-python-2026-03", private=False
+    )
+
+
+def test_private_config_default_true(
+    tmp_path: Path,
+) -> None:
+    """Config default_private=True with no CLI flag creates private repo."""
+    template = setup_template(tmp_path)
+    mock_config = make_mock_config(default_private=True)
+    mock_user = make_mock_user()
+
+    with (
+        patch(
+            "setup_course_github.setup_course.load_config",
+            return_value=mock_config,
+        ),
+        patch("setup_course_github.setup_course.Github") as mock_github_cls,
+        patch(
+            "setup_course_github.setup_course._get_template_dir",
+            return_value=template,
+        ),
+        patch(
+            "setup_course_github.setup_course.subprocess.run",
+            side_effect=_fake_subprocess,
+        ),
+        patch(
+            "setup_course_github.setup_course._today",
+            return_value=FAKE_TODAY,
+        ),
+    ):
+        mock_github_cls.return_value.get_user.return_value = mock_user
+        orig_cwd = Path.cwd()
+        os.chdir(tmp_path)
+        try:
+            sys.argv = ["setup-course", "-c", "acme", "-t", "python"]
+            main()
+            mock_user.create_repo.assert_called_once_with(
+                name="acme-python-2026-03", private=True
+            )
+        finally:
+            os.chdir(orig_cwd)
+
+
+def test_private_cli_overrides_config(
+    tmp_path: Path,
+) -> None:
+    """--private CLI flag overrides config default_private=False."""
+    template = setup_template(tmp_path)
+    mock_config = make_mock_config(default_private=False)
+    mock_user = make_mock_user()
+
+    with (
+        patch(
+            "setup_course_github.setup_course.load_config",
+            return_value=mock_config,
+        ),
+        patch("setup_course_github.setup_course.Github") as mock_github_cls,
+        patch(
+            "setup_course_github.setup_course._get_template_dir",
+            return_value=template,
+        ),
+        patch(
+            "setup_course_github.setup_course.subprocess.run",
+            side_effect=_fake_subprocess,
+        ),
+        patch(
+            "setup_course_github.setup_course._today",
+            return_value=FAKE_TODAY,
+        ),
+    ):
+        mock_github_cls.return_value.get_user.return_value = mock_user
+        orig_cwd = Path.cwd()
+        os.chdir(tmp_path)
+        try:
+            sys.argv = ["setup-course", "-c", "acme", "-t", "python", "--private"]
+            main()
+            mock_user.create_repo.assert_called_once_with(
+                name="acme-python-2026-03", private=True
+            )
+        finally:
+            os.chdir(orig_cwd)
+
+
+def test_dry_run_shows_private(
+    course_env: dict[str, Any],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """--private --dry-run output mentions 'private'."""
+    sys.argv = [
+        "setup-course",
+        "-c",
+        "acme",
+        "-t",
+        "python",
+        "--private",
+        "--dry-run",
+    ]
+    main()
+    output = capsys.readouterr().out
+    assert "private" in output
