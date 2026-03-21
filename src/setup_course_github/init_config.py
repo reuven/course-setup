@@ -77,7 +77,10 @@ def main(argv: list[str] | None = None) -> None:
     author_line = f"{__author__} <{__email__}>"
 
     parser = argparse.ArgumentParser(
-        description="Create a starter config file for course-setup.",
+        description=(
+            "Create a starter config file for course-setup.\n\n"
+            f"Config file path: {CONFIG_PATH}"
+        ),
         epilog=f"Version {__version__} — {pypi_url}\n{author_line}",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
