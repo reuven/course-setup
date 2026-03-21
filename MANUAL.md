@@ -766,7 +766,8 @@ setup-course-config [--force] [--version]
 
 Writes a commented template to your platform's config directory (see
 [Configuration](#configuration) above for exact paths). Creates the parent
-directories if they don't exist.
+directories if they don't exist. The `--help` output displays the full path
+to the config file for your platform.
 
 ---
 
