@@ -185,3 +185,16 @@ def test_help_shows_version_and_url(capsys: pytest.CaptureFixture[str]) -> None:
     assert __version__ in output
     assert "https://pypi.org/project/course-setup/" in output
     assert __author__ in output
+
+
+def test_help_shows_config_path(capsys: pytest.CaptureFixture[str]) -> None:
+    """--help output shows the config file path."""
+    from setup_course_github.config import CONFIG_PATH
+    from setup_course_github.init_config import main
+
+    with pytest.raises(SystemExit) as exc_info:
+        main(["--help"])
+    assert exc_info.value.code == 0
+    captured = capsys.readouterr()
+    output = captured.out + captured.err
+    assert str(CONFIG_PATH) in output
