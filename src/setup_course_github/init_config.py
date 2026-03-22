@@ -47,7 +47,14 @@ notebook_type = "jupyter"
 # extras_group = ""
 
 # Whether to create private GitHub repos by default.
+# Can be overridden with --private on the command line.
 # private = false
+
+# Weekend skipping policy for notebook date scheduling.
+# Options: "standard" (skip Sat+Sun) or "israeli" (skip Fri+Sat)
+# Can be overridden with --skip-weekends or --skip-israeli-weekends
+# on the command line.
+# weekend = "standard"
 
 # [extras]
 # Define custom dependency groups for --extras.
