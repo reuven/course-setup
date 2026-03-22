@@ -168,12 +168,13 @@ archive-course ./Acme-python-intro-2026-03
 | `--output`, `-o` | Custom output zip path (defaults to `{dirname}.zip`) |
 | `--no-html` | Skip HTML export of Jupyter notebooks |
 
-For Jupyter notebooks, `archive-course` exports each `.ipynb` to HTML via
-`nbconvert` and includes both the `.ipynb` and `.html` files in the zip. Use
-`--no-html` to skip the HTML export. The archive excludes `.git`, `.venv`,
-`__pycache__`, and `.ipynb_checkpoints` directories. After creating the
-archive, a summary is printed showing the archive path, file count, size, and
-which notebooks were included.
+This archives **all files** in the course directory (`.py`, `.csv`, `.toml`,
+notebooks, etc.), excluding `.git`, `.venv`, `__pycache__`, and
+`.ipynb_checkpoints` directories. For Jupyter notebooks, each `.ipynb` is also
+exported to HTML via `nbconvert` and the `.html` is included alongside the
+original; use `--no-html` to skip the HTML export. After creating the archive,
+a summary is printed listing the archive path, file count, size, notebooks,
+and all other included files.
 
 ### `unretire-course` — Restore a retired course
 
