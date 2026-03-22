@@ -88,6 +88,17 @@ def archive_course(
         else f"{zip_size / (1024 * 1024):.1f} MB"
     )
 
+    # Collect non-notebook, non-HTML files for the summary
+    notebook_names = {nb.name for nb in notebooks}
+    html_names = {nb.with_suffix(".html").name for nb in notebooks}
+    with zipfile.ZipFile(zip_path, "r") as zf:
+        other_files = sorted(
+            Path(name).name
+            for name in zf.namelist()
+            if Path(name).name not in notebook_names
+            and Path(name).name not in html_names
+        )
+
     # Print summary
     print(f"Archive created: {zip_path}")
     print(f"Files: {file_count}")
@@ -103,6 +114,11 @@ def archive_course(
                 print(f"  {nb.name}")
     if export_html and html_exported > 0:
         print(f"HTML exports: {html_exported}")
+
+    if other_files:
+        print("Other files:")
+        for name in other_files:
+            print(f"  {name}")
 
     return zip_path
 
