@@ -43,8 +43,7 @@ setup-course-config --version
 2. Click **Generate new token (classic)**.
 3. Give it a descriptive name (e.g., "course-setup").
 4. Select at minimum the **`repo`** scope (full control of private
-   repositories). If you plan to use `retire-course`, also select
-   **`delete_repo`**.
+   repositories).
 5. Click **Generate token** and copy the token immediately — you won't be able
    to see it again.
 
@@ -126,7 +125,7 @@ Open the generated `config.toml` in your editor. It looks like this:
 
 [github]
 # Your GitHub personal access token.
-# Needs: repo (read/write), delete_repo (if using retire-course)
+# Needs: repo (read/write)
 # Alternatively, set the GITHUB_TOKEN environment variable.
 token = "ghp_YOUR_TOKEN_HERE"
 
@@ -626,7 +625,7 @@ This archives the directory but leaves the GitHub repo publicly accessible.
 
 - The course directory must be a Git repo with an SSH remote URL in the format
   `git@github.com:username/reponame.git`.
-- Your GitHub token must have the `repo` scope (and `delete_repo` if needed).
+- Your GitHub token must have the `repo` scope.
 - The archive directory (`[paths] archive`) must already exist. The year
   subdirectory (e.g., `2026/`) will be created automatically if you confirm
   the prompt.
@@ -847,5 +846,5 @@ along from their own computers.
 | `Additional file not found: ...` | A path listed in `[paths] additional_files` does not exist. Check the path and fix it in your config file. |
 | `Destination already exists: ...` | When running `unretire-course`, a directory with the same name already exists in the current working directory. Remove or rename it first. |
 | GitHub API 401 error | Your token is invalid or expired. Generate a new one. |
-| GitHub API 403 error | Your token doesn't have the required scopes (`repo`, `delete_repo`). |
+| GitHub API 403 error | Your token doesn't have the required `repo` scope. |
 | `Permission denied` on SSH push | Make sure your SSH key is added to your GitHub account and `ssh -T git@github.com` works. |
