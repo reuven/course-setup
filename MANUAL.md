@@ -712,11 +712,13 @@ archive-course DIRNAME [--output PATH] [--no-html] [--version]
 2. **Exports each notebook to HTML** using `uv run jupyter nbconvert --to html`.
    This step is skipped if `--no-html` is passed or if no notebooks are found.
 3. **Creates a zip archive** containing all files in the course directory
-   (including the generated `.html` files). The archive preserves the directory
-   structure, with the course directory as the top-level folder inside the zip.
+   (including the generated `.html` files), excluding `.git`, `.venv`,
+   `__pycache__`, and `.ipynb_checkpoints` directories. The archive preserves
+   the directory structure, with the course directory as the top-level folder
+   inside the zip.
 4. **Prints a summary** showing:
    - Archive path and file count
-   - Archive size in bytes
+   - Archive size (displayed in KB or MB)
    - List of notebooks and their corresponding HTML exports
 
 #### Examples
