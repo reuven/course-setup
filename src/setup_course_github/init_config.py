@@ -11,7 +11,7 @@ CONFIG_TEMPLATE = """\
 
 [github]
 # Your GitHub personal access token.
-# Needs: repo (read/write), delete_repo (if using retire-course)
+# Needs: repo (read/write)
 # Alternatively, set the GITHUB_TOKEN environment variable.
 token = "ghp_YOUR_TOKEN_HERE"
 
