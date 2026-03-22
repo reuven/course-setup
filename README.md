@@ -170,9 +170,10 @@ archive-course ./Acme-python-intro-2026-03
 
 For Jupyter notebooks, `archive-course` exports each `.ipynb` to HTML via
 `nbconvert` and includes both the `.ipynb` and `.html` files in the zip. Use
-`--no-html` to skip the HTML export. After creating the archive, a summary is
-printed showing the archive path, file count, size, and which notebooks were
-included.
+`--no-html` to skip the HTML export. The archive excludes `.git`, `.venv`,
+`__pycache__`, and `.ipynb_checkpoints` directories. After creating the
+archive, a summary is printed showing the archive path, file count, size, and
+which notebooks were included.
 
 ### `unretire-course` — Restore a retired course
 
