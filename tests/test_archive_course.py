@@ -141,6 +141,61 @@ def test_archive_prints_summary(
     assert "Files: 2" in captured.out
 
 
+def test_archive_summary_lists_all_files(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Summary lists non-notebook files under 'Other files' section."""
+    course_dir = tmp_path / "mycourse"
+    course_dir.mkdir()
+    (course_dir / "script.py").write_text("print('hi')")
+    (course_dir / "data.csv").write_text("a,b\n1,2\n")
+    (course_dir / "pyproject.toml").write_text("[project]\nname = 'x'\n")
+
+    out = str(tmp_path / "mycourse.zip")
+    archive_course(str(course_dir), output=out, export_html=False)
+
+    captured = capsys.readouterr()
+    assert "Other files:" in captured.out
+    assert "data.csv" in captured.out
+    assert "pyproject.toml" in captured.out
+    assert "script.py" in captured.out
+
+
+def test_archive_summary_lists_notebooks_and_other_files(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Summary lists both notebooks and other files in separate sections."""
+    course_dir = tmp_path / "mycourse"
+    course_dir.mkdir()
+    (course_dir / "lesson.ipynb").write_text('{"cells": []}')
+    (course_dir / "helper.py").write_text("x = 1")
+
+    out = str(tmp_path / "mycourse.zip")
+    archive_course(str(course_dir), output=out, export_html=False)
+
+    captured = capsys.readouterr()
+    assert "Notebooks:" in captured.out
+    assert "lesson.ipynb" in captured.out
+    assert "Other files:" in captured.out
+    assert "helper.py" in captured.out
+
+
+def test_archive_summary_no_other_files_section_when_only_notebooks(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """No 'Other files' section when directory only contains notebooks."""
+    course_dir = tmp_path / "mycourse"
+    course_dir.mkdir()
+    (course_dir / "lesson.ipynb").write_text('{"cells": []}')
+
+    out = str(tmp_path / "mycourse.zip")
+    archive_course(str(course_dir), output=out, export_html=False)
+
+    captured = capsys.readouterr()
+    assert "Notebooks:" in captured.out
+    assert "Other files:" not in captured.out
+
+
 # ---------------------------------------------------------------------------
 # main() tests
 # ---------------------------------------------------------------------------
