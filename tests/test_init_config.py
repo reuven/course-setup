@@ -143,6 +143,14 @@ def test_config_template_mentions_verbose(tmp_path: Path) -> None:
     assert "verbose" in content
 
 
+def test_config_template_mentions_weekend(tmp_path: Path) -> None:
+    """The generated config template should mention 'weekend'."""
+    config_file = tmp_path / "config.toml"
+    create_config(config_file)
+    content = config_file.read_text()
+    assert "weekend" in content
+
+
 def test_config_template_mentions_extras_group(tmp_path: Path) -> None:
     """The generated config template should mention 'extras_group'."""
     config_file = tmp_path / "config.toml"
