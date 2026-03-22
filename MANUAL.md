@@ -720,6 +720,7 @@ archive-course DIRNAME [--output PATH] [--no-html] [--version]
    - Archive path and file count
    - Archive size (displayed in KB or MB)
    - List of notebooks and their corresponding HTML exports
+   - List of all other included files (`.py`, `.csv`, `.toml`, etc.)
 
 #### Examples
 
@@ -744,7 +745,7 @@ Skip HTML export:
 archive-course ./Acme-python-intro-2026-03 --no-html
 ```
 
-Creates the zip with only the original `.ipynb` files (no HTML conversion).
+Creates the zip with all course files but skips the HTML conversion step.
 
 ---
 
