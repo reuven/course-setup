@@ -2,6 +2,7 @@
 
 import argparse
 import shutil
+import sys
 from pathlib import Path
 
 from setup_course_github import __author__, __email__, __version__, get_github
@@ -42,7 +43,11 @@ def main() -> None:
     parser.add_argument("dirname", help="Path to the course directory to unretire")
     args = parser.parse_args()
 
-    unretire_course(args.dirname)
+    try:
+        unretire_course(args.dirname)
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
 
 
 if __name__ == "__main__":  # pragma: no cover
