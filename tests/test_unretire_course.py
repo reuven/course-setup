@@ -169,6 +169,39 @@ def test_unretire_main_calls_unretire_course() -> None:
     mock_unretire.assert_called_once_with("/archive/2024/myrepo")
 
 
+def test_main_prints_error_on_failure(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """main() prints 'Error: ...' to stderr and exits non-zero on failure."""
+    with patch("sys.argv", ["unretire-course", "/archive/2024/myrepo"]):
+        with patch(
+            "setup_course_github.unretire_course.unretire_course",
+            side_effect=RuntimeError("something went wrong"),
+        ):
+            with pytest.raises(SystemExit) as exc_info:
+                main()
+
+    assert exc_info.value.code != 0
+    captured = capsys.readouterr()
+    assert "Error:" in captured.err
+
+
+def test_main_error_does_not_print_traceback(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """main() must NOT print a traceback on failure."""
+    with patch("sys.argv", ["unretire-course", "/archive/2024/myrepo"]):
+        with patch(
+            "setup_course_github.unretire_course.unretire_course",
+            side_effect=RuntimeError("something went wrong"),
+        ):
+            with pytest.raises(SystemExit):
+                main()
+
+    captured = capsys.readouterr()
+    assert "Traceback" not in captured.out
+
+
 def test_unretire_main_requires_dirname() -> None:
     """main() must exit if dirname is not supplied."""
     with patch("sys.argv", ["unretire-course"]):
