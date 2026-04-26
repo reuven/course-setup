@@ -250,6 +250,95 @@ def test_help_shows_version_and_url(capsys: pytest.CaptureFixture[str]) -> None:
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# "You're inside the course directory" guard
+# ---------------------------------------------------------------------------
+
+
+def test_unretire_inside_course_basename(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """unretire_course('foo') from inside .../foo raises a clear error."""
+    from setup_course_github.retire_course import InsideCourseDirectoryError
+
+    course_dir = tmp_path / "foo-course"
+    course_dir.mkdir()
+    monkeypatch.chdir(course_dir)
+
+    with pytest.raises(InsideCourseDirectoryError, match="inside"):
+        unretire_course("foo-course")
+
+
+def test_unretire_inside_course_dot(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """unretire_course('.') from inside the course dir raises a clear error."""
+    from setup_course_github.retire_course import InsideCourseDirectoryError
+
+    course_dir = tmp_path / "foo-course"
+    course_dir.mkdir()
+    monkeypatch.chdir(course_dir)
+
+    with pytest.raises(InsideCourseDirectoryError, match="inside"):
+        unretire_course(".")
+
+
+def test_unretire_inside_course_absolute_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """unretire_course(absolute path equal to cwd) raises a clear error."""
+    from setup_course_github.retire_course import InsideCourseDirectoryError
+
+    course_dir = tmp_path / "foo-course"
+    course_dir.mkdir()
+    monkeypatch.chdir(course_dir)
+
+    with pytest.raises(InsideCourseDirectoryError, match="inside"):
+        unretire_course(str(course_dir))
+
+
+def test_unretire_inside_course_short_circuits(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """When inside the course dir, no GitHub or filesystem side effects occur."""
+    from setup_course_github.retire_course import InsideCourseDirectoryError
+
+    course_dir = tmp_path / "foo-course"
+    course_dir.mkdir()
+    monkeypatch.chdir(course_dir)
+
+    with patch("setup_course_github.unretire_course.get_remote_url") as mock_get_url:
+        with patch("setup_course_github.unretire_course.get_github") as mock_get_github:
+            with patch("setup_course_github.unretire_course.shutil.move") as mock_move:
+                with pytest.raises(InsideCourseDirectoryError):
+                    unretire_course("foo-course")
+
+    mock_get_url.assert_not_called()
+    mock_get_github.assert_not_called()
+    mock_move.assert_not_called()
+
+
+def test_unretire_main_inside_course_prints_hint(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """main() prints the friendly hint and exits 1 (no traceback)."""
+    course_dir = tmp_path / "foo-course"
+    course_dir.mkdir()
+    monkeypatch.chdir(course_dir)
+
+    with patch("sys.argv", ["unretire-course", "foo-course"]):
+        with pytest.raises(SystemExit) as exc_info:
+            main()
+
+    assert exc_info.value.code != 0
+    captured = capsys.readouterr()
+    output = captured.out + captured.err
+    assert "cd .." in output
+    assert "Traceback" not in output
+
+
 def test_unretire_dirname_with_spaces() -> None:
     """unretire_course handles a dirname with spaces correctly."""
     mock_repo = MagicMock()

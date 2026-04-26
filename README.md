@@ -157,6 +157,10 @@ retire-course ./Acme-2026-03 ./Beta-2026-03 ./Gamma-2026-02
 
 If any directory fails, the rest are still processed and errors are reported at the end.
 
+> **Tip:** run `retire-course` from the *parent* of the course directory, not
+> from inside it. If you're already inside, the command detects it and tells
+> you to `cd ..` rather than failing with a confusing error.
+
 ### `archive-course` — Create a zip archive of a course
 
 ```bash

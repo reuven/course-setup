@@ -629,6 +629,9 @@ This archives the directory but leaves the GitHub repo publicly accessible.
 - The archive directory (`[paths] archive`) must already exist. The year
   subdirectory (e.g., `2026/`) will be created automatically if you confirm
   the prompt.
+- Run `retire-course` from the *parent* of the course directory, not from
+  inside it. If you're already inside, the command stops with a clear error
+  telling you to `cd ..` rather than failing deep in the git plumbing.
 
 ---
 
@@ -680,6 +683,9 @@ working directory and makes the GitHub repo public.
   `Destination already exists: /path/to/Acme-python-intro-2026-03`
 - If the Git remote URL cannot be read or the GitHub API call fails, the
   command prints an error and exits with code 1.
+- If you run `unretire-course` while `cd`'d into the course directory itself
+  (e.g., passing `.` or its bare name), the command stops up front and tells
+  you to `cd ..` rather than failing with a cryptic git error.
 
 ---
 
@@ -848,6 +854,7 @@ along from their own computers.
 | `Aborted: archive directory ... not created` | You answered `n` (or pressed Enter) when prompted to create the archive year subdirectory. Create it manually or answer `y` next time. |
 | `Additional file not found: ...` | A path listed in `[paths] additional_files` does not exist. Check the path and fix it in your config file. |
 | `Destination already exists: ...` | When running `unretire-course`, a directory with the same name already exists in the current working directory. Remove or rename it first. |
+| `You appear to be inside '...'. Move up one directory (cd ..) and run the command again.` | You ran `retire-course` or `unretire-course` while `cd`'d into the course directory itself. `cd ..` and re-run the command, passing the directory name from outside. |
 | GitHub API 401 error | Your token is invalid or expired. Generate a new one. |
 | GitHub API 403 error | Your token doesn't have the required `repo` scope. |
 | `Permission denied` on SSH push | Make sure your SSH key is added to your GitHub account and `ssh -T git@github.com` works. |

@@ -6,11 +6,17 @@ import sys
 from pathlib import Path
 
 from setup_course_github import __author__, __email__, __version__, get_github
-from setup_course_github.retire_course import get_remote_url, parse_repo_name
+from setup_course_github.retire_course import (
+    _check_not_inside_course,
+    get_remote_url,
+    parse_repo_name,
+)
 
 
 def unretire_course(dirname: str) -> None:
     """Make the repo public again and move the directory to cwd."""
+    _check_not_inside_course(dirname)
+
     remote_url = get_remote_url(dirname)
     repo_name = parse_repo_name(remote_url)
 

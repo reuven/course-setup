@@ -14,6 +14,36 @@ from setup_course_github import __author__, __email__, __version__, get_github
 from setup_course_github.config import load_config
 
 
+class InsideCourseDirectoryError(RuntimeError):
+    """Raised when a command is run from inside the course directory it targets."""
+
+
+def _check_not_inside_course(dirname: str) -> None:
+    """Raise InsideCourseDirectoryError if the user is inside *dirname*.
+
+    Two cases are detected:
+      1. *dirname* resolves to the current working directory (e.g. ``.`` or
+         the absolute path of cwd).
+      2. *dirname* does not exist relative to cwd, but its basename matches
+         cwd's basename — the user has cd'd into the directory and then
+         passed its bare name on the command line.
+    """
+    cwd = Path.cwd().resolve()
+    target = Path(dirname)
+
+    inside = False
+    if target.exists() and target.resolve() == cwd:
+        inside = True
+    elif not target.exists() and target.name == cwd.name:
+        inside = True
+
+    if inside:
+        raise InsideCourseDirectoryError(
+            f"You appear to be inside '{dirname}'. "
+            "Move up one directory (cd ..) and run the command again."
+        )
+
+
 def get_remote_url(dirname: str) -> str:
     """Return the git remote.origin.url for the repo in dirname."""
     result = subprocess.run(
@@ -126,6 +156,8 @@ def _build_retirement_summary(
 
 def retire_course(dirname: str, keep_public: bool = False) -> None:
     """Move the local directory to the archive, optionally making the repo private."""
+    _check_not_inside_course(dirname)
+
     config = load_config()
 
     remote_url = get_remote_url(dirname)

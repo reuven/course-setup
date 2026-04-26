@@ -918,3 +918,146 @@ def test_main_no_keep_public_flag(tmp_path: Path) -> None:
             main()
 
     mock_retire.assert_called_once_with(str(tmp_path), keep_public=False)
+
+
+# ---------------------------------------------------------------------------
+# "You're inside the course directory" guard
+# ---------------------------------------------------------------------------
+
+
+def test_retire_inside_course_basename(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """retire_course('foo-course') from inside .../foo-course raises a clear error."""
+    from setup_course_github.retire_course import InsideCourseDirectoryError
+
+    course_dir = tmp_path / "foo-course"
+    course_dir.mkdir()
+    monkeypatch.chdir(course_dir)
+
+    with pytest.raises(InsideCourseDirectoryError, match="inside"):
+        retire_course("foo-course")
+
+
+def test_retire_inside_course_dot(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """retire_course('.') from inside the course dir raises a clear error."""
+    from setup_course_github.retire_course import InsideCourseDirectoryError
+
+    course_dir = tmp_path / "foo-course"
+    course_dir.mkdir()
+    monkeypatch.chdir(course_dir)
+
+    with pytest.raises(InsideCourseDirectoryError, match="inside"):
+        retire_course(".")
+
+
+def test_retire_inside_course_absolute_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """retire_course(absolute path equal to cwd) raises a clear error."""
+    from setup_course_github.retire_course import InsideCourseDirectoryError
+
+    course_dir = tmp_path / "foo-course"
+    course_dir.mkdir()
+    monkeypatch.chdir(course_dir)
+
+    with pytest.raises(InsideCourseDirectoryError, match="inside"):
+        retire_course(str(course_dir))
+
+
+def test_retire_inside_course_short_circuits(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """When inside the course dir, no GitHub or filesystem side effects occur."""
+    from setup_course_github.retire_course import InsideCourseDirectoryError
+
+    course_dir = tmp_path / "foo-course"
+    course_dir.mkdir()
+    monkeypatch.chdir(course_dir)
+
+    with patch("setup_course_github.retire_course.get_remote_url") as mock_get_url:
+        with patch("setup_course_github.retire_course.get_github") as mock_get_github:
+            with patch(
+                "setup_course_github.retire_course.load_config",
+                return_value=FAKE_CONFIG,
+            ):
+                with patch("shutil.move") as mock_move:
+                    with pytest.raises(InsideCourseDirectoryError):
+                        retire_course("foo-course")
+
+    mock_get_url.assert_not_called()
+    mock_get_github.assert_not_called()
+    mock_move.assert_not_called()
+
+
+def test_retire_inside_course_hint_mentions_cd_up(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Error message tells the user to move up one directory."""
+    from setup_course_github.retire_course import InsideCourseDirectoryError
+
+    course_dir = tmp_path / "foo-course"
+    course_dir.mkdir()
+    monkeypatch.chdir(course_dir)
+
+    with pytest.raises(InsideCourseDirectoryError) as exc_info:
+        retire_course("foo-course")
+
+    msg = str(exc_info.value)
+    assert "cd .." in msg
+
+
+def test_retire_main_inside_course_prints_hint(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """main() prints the friendly hint and exits 1 (no traceback)."""
+    course_dir = tmp_path / "foo-course"
+    course_dir.mkdir()
+    monkeypatch.chdir(course_dir)
+
+    with patch("sys.argv", ["retire-course", "foo-course"]):
+        with pytest.raises(SystemExit) as exc_info:
+            main()
+
+    assert exc_info.value.code == 1
+    captured = capsys.readouterr()
+    assert "cd .." in captured.out
+    assert "Traceback" not in captured.out
+    assert "Traceback" not in captured.err
+
+
+def test_retire_sibling_dir_does_not_trigger_guard(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Guard does not fire when dirname is a real sibling directory."""
+    sibling = tmp_path / "sibling-course"
+    sibling.mkdir()
+    other = tmp_path / "other-dir"
+    other.mkdir()
+    monkeypatch.chdir(other)
+
+    mock_repo = MagicMock()
+    mock_github = MagicMock()
+    mock_github.get_repo.return_value = mock_repo
+
+    with patch(
+        "setup_course_github.retire_course.get_remote_url",
+        return_value="git@github.com:u/sibling-course.git",
+    ):
+        with patch(
+            "setup_course_github.retire_course.get_github",
+            return_value=mock_github,
+        ):
+            with patch(
+                "setup_course_github.retire_course.load_config",
+                return_value=FAKE_CONFIG,
+            ):
+                with patch("setup_course_github.retire_course._confirm_create_dir"):
+                    with patch("shutil.move") as mock_move:
+                        retire_course(str(sibling))
+
+    mock_move.assert_called_once()
