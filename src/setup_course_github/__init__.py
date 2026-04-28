@@ -8,7 +8,7 @@ from setup_course_github.config import load_config
 _meta = metadata("course-setup")
 __version__: str = _meta["Version"] or "0.0.0"
 __author__: str = "Reuven Lerner"
-__email__: str = "reuven@lerner.co.il"
+__email__: str = "reuven@lernerpython.com"
 
 
 def get_github() -> Github:
