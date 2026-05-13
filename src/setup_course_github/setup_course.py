@@ -83,8 +83,11 @@ def _build_pyproject_toml(
     extras: list[str] | None = None,
 ) -> str:
     """Generate a pyproject.toml string for the new course directory."""
-    notebook_dep = "jupyter" if notebook_type == "jupyter" else "marimo"
-    deps = [notebook_dep, "gitautopush"]
+    deps = (
+        ["jupyter", "ipyparallel", "gitautopush"]
+        if notebook_type == "jupyter"
+        else ["marimo", "gitautopush"]
+    )
     if extras:
         deps.extend(extras)
     deps_str = "\n".join(f'    "{d}",' for d in deps)
@@ -422,7 +425,11 @@ def main() -> None:
         _print_status(f"  Directory: {destination}")
         _print_status(f"  Notebook type: {notebook_type}")
         _print_status(f"  Notebooks: {', '.join(notebook_filenames)}")
-        deps = ["jupyter" if notebook_type == "jupyter" else "marimo", "gitautopush"]
+        deps = (
+            ["jupyter", "ipyparallel", "gitautopush"]
+            if notebook_type == "jupyter"
+            else ["marimo", "gitautopush"]
+        )
         if extra_packages:
             deps.extend(extra_packages)
         _print_status(f"  Dependencies: {', '.join(deps)}")
