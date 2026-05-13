@@ -1011,7 +1011,41 @@ def test_no_extras_flag_produces_only_base_deps(course_env: dict[str, Any]) -> N
     with open(dest / "pyproject.toml", "rb") as f:
         data = tomllib.load(f)
     deps = data["project"]["dependencies"]
-    assert deps == ["jupyter", "gitautopush"]
+    assert deps == ["jupyter", "ipyparallel", "gitautopush"]
+
+
+def test_jupyter_deps_include_ipyparallel(course_env: dict[str, Any]) -> None:
+    """ipyparallel is always included when notebook type is jupyter."""
+    import tomllib
+
+    sys.argv = ["setup-course", "-c", "acme", "-t", "python"]
+    main()
+    dest = course_env["tmp_path"] / "acme-python-2026-03"
+    with open(dest / "pyproject.toml", "rb") as f:
+        data = tomllib.load(f)
+    deps = data["project"]["dependencies"]
+    assert "ipyparallel" in deps
+
+
+def test_marimo_deps_exclude_ipyparallel(course_env: dict[str, Any]) -> None:
+    """ipyparallel is not added when notebook type is marimo."""
+    import tomllib
+
+    sys.argv = [
+        "setup-course",
+        "-c",
+        "acme",
+        "-t",
+        "python",
+        "--notebook-type",
+        "marimo",
+    ]
+    main()
+    dest = course_env["tmp_path"] / "acme-python-2026-03"
+    with open(dest / "pyproject.toml", "rb") as f:
+        data = tomllib.load(f)
+    deps = data["project"]["dependencies"]
+    assert "ipyparallel" not in deps
 
 
 # ---------------------------------------------------------------------------
