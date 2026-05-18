@@ -17,6 +17,10 @@ versions means we won't lose anything.)
     - Implement the feature
     - The test will pass
 - Use pytest for testing. And always make sure you have 100% test coverage.
+- Use mutation testing (`uv run mutmut run`) to audit test quality:
+    - Run it before merging a feature branch and before publishing a release.
+    - It is too slow to run before every commit — treat it as a periodic audit, not a gate.
+    - When surviving mutants are found, write new tests to kill the real logic gaps; ignore string-literal mutations in output/help text.
 - You're in a Git repo. Use it:
     - Commit to Git on a very regular basis. Better to have many small commits than fewer big commits
     - If you have implemented a feature, or fixed a bug, commit! Even if it's only a small thing on one file.
