@@ -96,12 +96,10 @@ def test_load_config_token_from_env(tmp_path: Path) -> None:
 def test_load_config_missing_token_no_env(tmp_path: Path) -> None:
     config_file = tmp_path / "config.toml"
     config_file.write_text(MISSING_TOKEN_TOML)
-    with patch.dict(os.environ, {}, clear=True):
-        # Remove GITHUB_TOKEN if it happens to exist in the environment
-        env = {k: v for k, v in os.environ.items() if k != "GITHUB_TOKEN"}
-        with patch.dict(os.environ, env, clear=True):
-            with pytest.raises(ConfigError, match="github_token"):
-                load_config(config_file)
+    env = {k: v for k, v in os.environ.items() if k != "GITHUB_TOKEN"}
+    with patch.dict(os.environ, env, clear=True):
+        with pytest.raises(ConfigError, match="github_token"):
+            load_config(config_file)
 
 
 def test_load_config_missing_archive(tmp_path: Path) -> None:
