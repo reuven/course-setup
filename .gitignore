@@ -9,6 +9,7 @@ src/*.egg-info/
 
 # Caches
 .mypy_cache/
+.mutmut-cache
 .pytest_cache/
 .ruff_cache/
 __pycache__/
