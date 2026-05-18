@@ -617,6 +617,18 @@ def test_confirm_create_dir_creates_nested(tmp_path: Path) -> None:
     assert nested_dir.exists()
 
 
+def test_confirm_create_dir_already_exists_no_prompt(tmp_path: Path) -> None:
+    """When archive dir already exists, no prompt is shown and no error raised."""
+    existing_dir = tmp_path / "2026"
+    existing_dir.mkdir()
+
+    mock_confirm = MagicMock()
+    _confirm_create_dir(existing_dir, confirm=mock_confirm)
+
+    mock_confirm.assert_not_called()
+    assert existing_dir.exists()
+
+
 # ---------------------------------------------------------------------------
 # _build_retirement_summary
 # ---------------------------------------------------------------------------
@@ -773,6 +785,19 @@ def test_retirement_summary_unreadable_py_file(tmp_path: Path) -> None:
     assert "Notebooks: 0" in summary
 
 
+def test_marimo_notebook_requires_both_markers(tmp_path: Path) -> None:
+    """_is_marimo_notebook requires BOTH markers — not just one."""
+    from setup_course_github.retire_course import _is_marimo_notebook
+
+    import_only = tmp_path / "import_only.py"
+    import_only.write_text("import marimo\n\nprint('hello')\n")
+    assert not _is_marimo_notebook(import_only)
+
+    app_only = tmp_path / "app_only.py"
+    app_only.write_text("# no import\napp = marimo.App()\n")
+    assert not _is_marimo_notebook(app_only)
+
+
 def test_retirement_summary_corrupt_pyproject(tmp_path: Path) -> None:
     """A corrupt pyproject.toml results in 'none' for dependencies."""
     course_dir = tmp_path / "corrupt-toml"
@@ -781,6 +806,20 @@ def test_retirement_summary_corrupt_pyproject(tmp_path: Path) -> None:
 
     dest = tmp_path / "archive" / "2026"
     summary = _build_retirement_summary(str(course_dir), "user/corrupt-toml", dest)
+
+    assert "Dependencies: none" in summary
+
+
+def test_retirement_summary_empty_dependencies_list(tmp_path: Path) -> None:
+    """A pyproject.toml with dependencies=[] shows 'none', not an empty string."""
+    course_dir = tmp_path / "empty-deps"
+    course_dir.mkdir()
+    (course_dir / "pyproject.toml").write_text(
+        '[project]\nname = "empty-deps"\ndependencies = []\n'
+    )
+
+    dest = tmp_path / "archive" / "2026"
+    summary = _build_retirement_summary(str(course_dir), "user/empty-deps", dest)
 
     assert "Dependencies: none" in summary
 
@@ -923,6 +962,21 @@ def test_main_no_keep_public_flag(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 # "You're inside the course directory" guard
 # ---------------------------------------------------------------------------
+
+
+def test_check_not_inside_course_does_not_raise_when_outside(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """_check_not_inside_course does not raise when cwd is a different directory."""
+    from setup_course_github.retire_course import _check_not_inside_course
+
+    course_dir = tmp_path / "my-course"
+    course_dir.mkdir()
+    other_dir = tmp_path / "other-dir"
+    other_dir.mkdir()
+    monkeypatch.chdir(other_dir)
+
+    _check_not_inside_course("my-course")  # must not raise
 
 
 def test_retire_inside_course_basename(
