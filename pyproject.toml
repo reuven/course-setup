@@ -1,6 +1,6 @@
 [project]
     name = "course-setup"
-    version = "3.0.9"
+    version = "3.0.10"
     description = "CLI tools for setting up and retiring GitHub-backed course repositories"
     readme = "README.md"
     requires-python = ">=3.13"
@@ -42,6 +42,7 @@
 
 [dependency-groups]
 dev = [
+    "mutmut<3",
     "mypy>=1.19.1",
     "pytest>=9.0.2",
     "pytest-cov>=7.0.0",
@@ -76,3 +77,7 @@ dev = [
     "pragma: no cover",
     "if __name__ == .__main__.:",
   ]
+
+[tool.mutmut]
+  paths_to_mutate = "src/"
+  runner = "uv run pytest -x -q --no-cov"
