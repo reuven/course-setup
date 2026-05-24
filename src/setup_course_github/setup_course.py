@@ -231,9 +231,6 @@ def _print_verbose(msg: str, verbose: bool) -> None:
 
 
 def main() -> None:
-    config = load_config()
-    extras_groups = {**EXTRAS_GROUPS, **config.custom_extras}
-
     pypi_url = "https://pypi.org/project/course-setup/"
     author_line = f"{__author__} <{__email__}>"
 
@@ -318,6 +315,12 @@ def main() -> None:
     )
 
     args = parser.parse_args()
+
+    # Load config only after argparse has handled --version/--help (which exit
+    # early). This lets `setup-course --version`/`--help` work without a config
+    # file, e.g. immediately after a fresh install.
+    config = load_config()
+    extras_groups = {**EXTRAS_GROUPS, **config.custom_extras}
 
     # Validate -d/--date format and range
     if args.date is not None:

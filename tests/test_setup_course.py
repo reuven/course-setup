@@ -2115,13 +2115,24 @@ def test_dry_run_shows_notebook_type(
 
 
 def test_version_flag_prints_version(capsys: pytest.CaptureFixture[str]) -> None:
-    """--version prints the version, PyPI URL, and author info."""
+    """--version prints version info without requiring a config file.
+
+    On a fresh install (no config.toml yet) ``setup-course --version`` must
+    still work, so argparse must handle --version before load_config runs.
+    """
     from setup_course_github import __author__, __email__, __version__
 
-    with patch("sys.argv", ["setup-course", "--version"]):
+    with (
+        patch("sys.argv", ["setup-course", "--version"]),
+        patch(
+            "setup_course_github.setup_course.load_config",
+            return_value=make_mock_config(),
+        ) as mock_load_config,
+    ):
         with pytest.raises(SystemExit) as exc_info:
             main()
     assert exc_info.value.code == 0
+    mock_load_config.assert_not_called()
     captured = capsys.readouterr()
     output = captured.out + captured.err
     assert __version__ in output
@@ -2131,13 +2142,20 @@ def test_version_flag_prints_version(capsys: pytest.CaptureFixture[str]) -> None
 
 
 def test_help_shows_version_and_url(capsys: pytest.CaptureFixture[str]) -> None:
-    """--help output contains version, PyPI URL, and author name."""
+    """--help works without a config file and shows version, URL, and author."""
     from setup_course_github import __author__, __version__
 
-    with patch("sys.argv", ["setup-course", "--help"]):
+    with (
+        patch("sys.argv", ["setup-course", "--help"]),
+        patch(
+            "setup_course_github.setup_course.load_config",
+            return_value=make_mock_config(),
+        ) as mock_load_config,
+    ):
         with pytest.raises(SystemExit) as exc_info:
             main()
     assert exc_info.value.code == 0
+    mock_load_config.assert_not_called()
     captured = capsys.readouterr()
     output = captured.out + captured.err
     assert __version__ in output
