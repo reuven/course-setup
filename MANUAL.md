@@ -90,18 +90,29 @@ uv sync
 
 ### Continuous integration
 
-Every push and pull request runs the same checks on GitHub Actions, across
-Python 3.13 and 3.14:
+Every push and pull request runs these checks on GitHub Actions as three
+parallel jobs (`.github/workflows/ci.yml`):
 
 ```
-uv run ruff check .          # lint
-uv run ruff format --check . # formatting (verify only, no rewrite)
-uv run mypy src tests        # strict type checking
-uv run pytest                # tests + 100% coverage gate
+uv run ruff check .          # lint        (Linux)
+uv run ruff format --check . # formatting  (Linux; verify only, no rewrite)
+uv run mypy src tests        # type check  (Linux, strict)
+uv run pytest                # tests       (Linux + macOS + Windows, 3.13 & 3.14)
 ```
 
-Run these locally before pushing to get the same green/red result CI will
-report. The workflow lives in `.github/workflows/ci.yml`.
+Lint and type-check results are OS-independent, so they run once on Linux;
+the tests run across all three operating systems and both Python versions,
+since that is where filesystem and path behaviour can differ. Run the commands
+locally before pushing to get the same green/red result CI will report.
+
+Two further automations:
+
+- **Mutation testing** (`.github/workflows/mutation.yml`) runs `mutmut` weekly
+  (and on demand via the Actions "Run workflow" button) as a test-quality
+  audit. It reports surviving mutants but never fails the run — review the job
+  summary, and ignore string-literal mutations in output/help text.
+- **Dependabot** (`.github/dependabot.yml`) opens weekly pull requests to bump
+  GitHub Actions and Python (uv) dependencies; CI vets each one.
 
 ---
 
