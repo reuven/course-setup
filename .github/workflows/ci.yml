@@ -1,0 +1,45 @@
+name: CI
+
+on: [push, pull_request]
+
+# The workflow only reads the repo; restrict the token to least privilege.
+permissions:
+  contents: read
+
+# Cancel an in-progress run when newer commits land on the same ref/event,
+# so rapid pushes don't pile up wasted runs.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.13", "3.14"]
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8
+        with:
+          enable-cache: true
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: uv sync --locked
+
+      - name: Ruff lint
+        run: uv run ruff check .
+
+      - name: Ruff format check
+        run: uv run ruff format --check .
+
+      - name: mypy (strict)
+        run: uv run mypy src tests
+
+      - name: pytest
+        run: uv run pytest
