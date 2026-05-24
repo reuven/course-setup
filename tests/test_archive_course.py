@@ -385,3 +385,39 @@ def test_archive_excludes_dirs_when_dirname_has_spaces(tmp_path: Path) -> None:
         assert not any(".venv" in n for n in names)
         assert not any("__pycache__" in n for n in names)
         assert not any(".ipynb_checkpoints" in n for n in names)
+
+
+# ---------------------------------------------------------------------------
+# --version / --help flags
+# ---------------------------------------------------------------------------
+
+
+def test_version_flag_prints_version(capsys: pytest.CaptureFixture[str]) -> None:
+    """--version prints version, PyPI URL, and author info without a config file."""
+    from setup_course_github import __author__, __email__, __version__
+
+    with patch("sys.argv", ["archive-course", "--version"]):
+        with pytest.raises(SystemExit) as exc_info:
+            main()
+    assert exc_info.value.code == 0
+    captured = capsys.readouterr()
+    output = captured.out + captured.err
+    assert __version__ in output
+    assert "https://pypi.org/project/course-setup/" in output
+    assert __author__ in output
+    assert __email__ in output
+
+
+def test_help_shows_version_and_url(capsys: pytest.CaptureFixture[str]) -> None:
+    """--help works without a config file and shows version, URL, and author."""
+    from setup_course_github import __author__, __version__
+
+    with patch("sys.argv", ["archive-course", "--help"]):
+        with pytest.raises(SystemExit) as exc_info:
+            main()
+    assert exc_info.value.code == 0
+    captured = capsys.readouterr()
+    output = captured.out + captured.err
+    assert __version__ in output
+    assert "https://pypi.org/project/course-setup/" in output
+    assert __author__ in output
