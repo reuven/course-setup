@@ -42,7 +42,7 @@
 
 [dependency-groups]
 dev = [
-    "mutmut<3",
+    "mutmut<4",
     "mypy>=1.19.1",
     "pytest>=9.0.2",
     "pytest-cov>=7.0.0",
