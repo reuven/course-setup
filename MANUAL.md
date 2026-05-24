@@ -88,6 +88,21 @@ cd course-setup
 uv sync
 ```
 
+### Continuous integration
+
+Every push and pull request runs the same checks on GitHub Actions, across
+Python 3.13 and 3.14:
+
+```
+uv run ruff check .          # lint
+uv run ruff format --check . # formatting (verify only, no rewrite)
+uv run mypy src tests        # strict type checking
+uv run pytest                # tests + 100% coverage gate
+```
+
+Run these locally before pushing to get the same green/red result CI will
+report. The workflow lives in `.github/workflows/ci.yml`.
+
 ---
 
 ## Configuration
