@@ -1,0 +1,16 @@
+version: 2
+updates:
+  # Keep the versions pinned in .github/workflows/*.yml current.
+  # Especially useful because setup-uv has no floating major tag, so its
+  # full pin (e.g. v8.1.0) would otherwise never advance on its own.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+
+  # Keep Python dependencies (pyproject.toml + uv.lock) current. Dependabot
+  # has supported uv as a native ecosystem since March 2025.
+  - package-ecosystem: "uv"
+    directory: "/"
+    schedule:
+      interval: "weekly"
