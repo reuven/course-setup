@@ -12,34 +12,60 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
   cancel-in-progress: true
 
+# Use bash on every OS (including Windows, via Git Bash) so the run steps
+# behave identically everywhere.
+defaults:
+  run:
+    shell: bash
+
 jobs:
-  checks:
+  # Lint and type-check results are OS-independent, so each runs once on Linux.
+  lint:
     runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.1.0
+        with:
+          enable-cache: true
+          python-version: "3.13"
+      - name: Install dependencies
+        run: uv sync --locked
+      - name: Ruff lint
+        run: uv run ruff check .
+      - name: Ruff format check
+        run: uv run ruff format --check .
+
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.1.0
+        with:
+          enable-cache: true
+          python-version: "3.13"
+      - name: Install dependencies
+        run: uv sync --locked
+      - name: mypy (strict)
+        run: uv run mypy src tests
+
+  # Tests exercise real filesystem/path behaviour, so run them on every OS.
+  test:
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
         python-version: ["3.13", "3.14"]
-
     steps:
       - uses: actions/checkout@v6
-
       - name: Install uv
         uses: astral-sh/setup-uv@v8.1.0
         with:
           enable-cache: true
           python-version: ${{ matrix.python-version }}
-
       - name: Install dependencies
         run: uv sync --locked
-
-      - name: Ruff lint
-        run: uv run ruff check .
-
-      - name: Ruff format check
-        run: uv run ruff format --check .
-
-      - name: mypy (strict)
-        run: uv run mypy src tests
-
       - name: pytest
         run: uv run pytest
