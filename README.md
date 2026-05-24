@@ -1,5 +1,7 @@
 # course-setup
 
+[![CI](https://github.com/reuven/course-setup/actions/workflows/ci.yml/badge.svg)](https://github.com/reuven/course-setup/actions/workflows/ci.yml)
+
 CLI tools for setting up and retiring GitHub-backed course repositories.
 
 ## Installation
