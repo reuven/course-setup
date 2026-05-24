@@ -1,0 +1,55 @@
+name: Mutation testing
+
+# Periodic test-quality audit (not a per-push gate): mutmut mutates the source
+# and checks whether the test suite catches each change. Surviving mutants are
+# reported for review, but never fail the run — some (e.g. string literals in
+# help text) are expected and intentionally ignored.
+on:
+  schedule:
+    # 06:37 UTC every Monday. Odd minute avoids the top-of-hour scheduling
+    # congestion that delays cron workflows.
+    - cron: "37 6 * * 1"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: true
+
+jobs:
+  mutmut:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.1.0
+        with:
+          enable-cache: true
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: uv sync --locked
+
+      - name: Run mutation testing (report-only)
+        # mutmut exits non-zero when mutants survive; that is expected here, so
+        # don't let it fail the job. The results are summarised in the next step.
+        run: uv run mutmut run || true
+
+      - name: Publish results to job summary
+        if: always()
+        run: |
+          {
+            echo '## Mutation testing results'
+            echo
+            echo 'Surviving mutants (review for real gaps; ignore string-literal'
+            echo 'mutations in output/help text). Reproduce locally with'
+            echo '`uv run mutmut run`, inspect one with `uv run mutmut show <id>`.'
+            echo
+            echo '```'
+            uv run mutmut results || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
