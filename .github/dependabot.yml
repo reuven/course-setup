@@ -14,3 +14,9 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    ignore:
+      # mutmut 3.x is a breaking rewrite incompatible with our code and config;
+      # stay on the 2.x line (see also the `mutmut<3` cap in pyproject.toml).
+      # Still allow 2.x minor/patch bumps.
+      - dependency-name: "mutmut"
+        update-types: ["version-update:semver-major"]
