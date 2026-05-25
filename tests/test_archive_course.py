@@ -421,3 +421,100 @@ def test_help_shows_version_and_url(capsys: pytest.CaptureFixture[str]) -> None:
     assert __version__ in output
     assert "https://pypi.org/project/course-setup/" in output
     assert __author__ in output
+
+
+# ---------------------------------------------------------------------------
+# HTML export accounting (assert the *effect* of export, not just the call)
+# ---------------------------------------------------------------------------
+
+
+def test_archive_reports_html_export_count_on_success(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A successful HTML export is counted and reported in the summary."""
+    course_dir = tmp_path / "mycourse"
+    course_dir.mkdir()
+    (course_dir / "lesson.ipynb").write_text('{"cells": []}')
+
+    out = str(tmp_path / "out.zip")
+    with patch("setup_course_github.archive_course.subprocess.run", MagicMock()):
+        archive_course(str(course_dir), output=out, export_html=True)
+
+    assert "HTML exports: 1" in capsys.readouterr().out
+
+
+def test_archive_failed_html_export_not_counted(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A failed nbconvert is not counted, so no 'HTML exports' line appears."""
+    import subprocess as sp
+
+    course_dir = tmp_path / "mycourse"
+    course_dir.mkdir()
+    (course_dir / "lesson.ipynb").write_text('{"cells": []}')
+
+    def fail_nbconvert(*args: object, **kwargs: object) -> None:
+        raise sp.CalledProcessError(1, "nbconvert", stderr=b"boom")
+
+    out = str(tmp_path / "out.zip")
+    with patch(
+        "setup_course_github.archive_course.subprocess.run", side_effect=fail_nbconvert
+    ):
+        archive_course(str(course_dir), output=out, export_html=True)
+
+    assert "HTML exports:" not in capsys.readouterr().out
+
+
+def test_archive_missing_nbconvert_not_counted(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """When jupyter/nbconvert is missing, nothing is counted as exported."""
+    course_dir = tmp_path / "mycourse"
+    course_dir.mkdir()
+    (course_dir / "lesson.ipynb").write_text('{"cells": []}')
+
+    out = str(tmp_path / "out.zip")
+    with patch(
+        "setup_course_github.archive_course.subprocess.run",
+        side_effect=FileNotFoundError,
+    ):
+        archive_course(str(course_dir), output=out, export_html=True)
+
+    assert "HTML exports:" not in capsys.readouterr().out
+
+
+def test_archive_no_html_ignores_existing_html_file(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """With export_html=False, an existing .html on disk is not paired in summary."""
+    course_dir = tmp_path / "mycourse"
+    course_dir.mkdir()
+    (course_dir / "lesson.ipynb").write_text('{"cells": []}')
+    (course_dir / "lesson.html").write_text("<html></html>")
+
+    out = str(tmp_path / "out.zip")
+    archive_course(str(course_dir), output=out, export_html=False)
+
+    output = capsys.readouterr().out
+    assert "lesson.ipynb + lesson.html" not in output
+    assert "lesson.ipynb" in output
+
+
+def test_archive_excludes_checkpoint_notebooks_from_html(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Notebooks under .ipynb_checkpoints are not exported to HTML or counted."""
+    course_dir = tmp_path / "mycourse"
+    course_dir.mkdir()
+    (course_dir / "lesson.ipynb").write_text('{"cells": []}')
+    ckpt = course_dir / ".ipynb_checkpoints"
+    ckpt.mkdir()
+    (ckpt / "lesson-checkpoint.ipynb").write_text('{"cells": []}')
+
+    out = str(tmp_path / "out.zip")
+    with patch("setup_course_github.archive_course.subprocess.run", MagicMock()):
+        archive_course(str(course_dir), output=out, export_html=True)
+
+    output = capsys.readouterr().out
+    assert "HTML exports: 1" in output
+    assert "checkpoint" not in output
