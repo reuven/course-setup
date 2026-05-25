@@ -2476,6 +2476,79 @@ def test_skip_weekends_config_default(course_env: dict[str, Any]) -> None:
     ]
 
 
+def test_skip_weekends_creates_only_weekday_notebooks(
+    course_env: dict[str, Any],
+) -> None:
+    """main() actually applies --skip-weekends to the notebooks it creates.
+
+    Asserts on the files main() writes (not a re-computed _notebook_dates), so
+    it catches a broken CLI->skip_days resolution inside main().
+    """
+    course_env["config"].default_weekend = None  # CLI flag must be what drives it
+    sys.argv = [
+        "setup-course",
+        "-c",
+        "acme",
+        "-t",
+        "python",
+        "-n",
+        "5",
+        "--skip-weekends",
+    ]
+    main()
+    dest = course_env["tmp_path"] / "acme-python-2026-03"
+    created = sorted(p.name for p in dest.glob("*.ipynb"))
+    assert created == [
+        "acme-python-2026-03-19.ipynb",  # Thu
+        "acme-python-2026-03-20.ipynb",  # Fri
+        "acme-python-2026-03-23.ipynb",  # Mon
+        "acme-python-2026-03-24.ipynb",  # Tue
+        "acme-python-2026-03-25.ipynb",  # Wed
+    ]
+    assert not (dest / "acme-python-2026-03-21.ipynb").exists()  # Sat skipped
+    assert not (dest / "acme-python-2026-03-22.ipynb").exists()  # Sun skipped
+
+
+def test_skip_israeli_weekends_creates_correct_notebooks(
+    course_env: dict[str, Any],
+) -> None:
+    """main() actually applies --skip-israeli-weekends to the files it creates."""
+    course_env["config"].default_weekend = None
+    sys.argv = [
+        "setup-course",
+        "-c",
+        "acme",
+        "-t",
+        "python",
+        "-n",
+        "5",
+        "--skip-israeli-weekends",
+    ]
+    main()
+    dest = course_env["tmp_path"] / "acme-python-2026-03"
+    created = sorted(p.name for p in dest.glob("*.ipynb"))
+    assert created == [
+        "acme-python-2026-03-19.ipynb",  # Thu
+        "acme-python-2026-03-22.ipynb",  # Sun
+        "acme-python-2026-03-23.ipynb",  # Mon
+        "acme-python-2026-03-24.ipynb",  # Tue
+        "acme-python-2026-03-25.ipynb",  # Wed
+    ]
+    assert not (dest / "acme-python-2026-03-20.ipynb").exists()  # Fri skipped
+    assert not (dest / "acme-python-2026-03-21.ipynb").exists()  # Sat skipped
+
+
+def test_default_num_sessions_creates_single_notebook(
+    course_env: dict[str, Any],
+) -> None:
+    """With no -n, exactly one notebook is created (the default is 1, not more)."""
+    sys.argv = ["setup-course", "-c", "acme", "-t", "python"]
+    main()
+    dest = course_env["tmp_path"] / "acme-python-2026-03"
+    created = sorted(p.name for p in dest.glob("*.ipynb"))
+    assert created == ["acme-python-2026-03-19.ipynb"]
+
+
 def test_gitignore_present_in_course_directory(
     course_env: dict[str, Any],
 ) -> None:
