@@ -1739,6 +1739,11 @@ def test_dry_run_prints_dependencies(
     assert "jupyter" in output
     assert "gitautopush" in output
     assert "numpy" in output
+    # ipyparallel is jupyter-only; marimo deps must not appear for a jupyter
+    # course. Pins the notebook_type -> deps branch (not just the "jupyter"
+    # that also shows up in the "Notebook type:" line).
+    assert "ipyparallel" in output
+    assert "marimo" not in output
 
 
 def test_dry_run_uses_placeholder_github_user(
