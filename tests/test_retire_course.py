@@ -703,6 +703,29 @@ def test_retirement_summary_with_notebooks(tmp_path: Path) -> None:
     assert "pandas" in summary
 
 
+def test_retirement_summary_strips_version_specifiers(tmp_path: Path) -> None:
+    """Version specifiers are stripped so only bare package names are shown.
+
+    Pins the ``re.split(r"[><=!~;]", d)`` name extraction: a substring check
+    like ``"pandas" in summary`` cannot catch a broken split (``pandas>=2.0``
+    still contains ``pandas``), so we assert the specifier itself is absent.
+    """
+    course_dir = tmp_path / "versioned"
+    course_dir.mkdir()
+    toml = (
+        '[project]\nname = "versioned"\n'
+        'dependencies = ["pandas>=2.0", "numpy<2", "requests~=2.31"]\n'
+    )
+    (course_dir / "pyproject.toml").write_text(toml)
+
+    dest = tmp_path / "archive" / "2026"
+    summary = _build_retirement_summary(str(course_dir), "user/versioned", dest)
+
+    assert "  Dependencies: pandas, numpy, requests" in summary
+    assert ">=" not in summary
+    assert "pandas>=2.0" not in summary
+
+
 def test_retirement_summary_no_notebooks(tmp_path: Path) -> None:
     """Directory with no notebooks shows 0 in summary."""
     course_dir = tmp_path / "empty-course"
