@@ -518,3 +518,44 @@ def test_archive_excludes_checkpoint_notebooks_from_html(
     output = capsys.readouterr().out
     assert "HTML exports: 1" in output
     assert "checkpoint" not in output
+
+
+def test_archive_html_export_count_accumulates_across_notebooks(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Two successful exports are counted as 2, not reset to 1.
+
+    Pins ``html_exported += 1`` against a mutation to ``html_exported = 1``,
+    which a single-notebook test cannot distinguish (1 == 1).
+    """
+    course_dir = tmp_path / "mycourse"
+    course_dir.mkdir()
+    (course_dir / "lesson1.ipynb").write_text('{"cells": []}')
+    (course_dir / "lesson2.ipynb").write_text('{"cells": []}')
+
+    out = str(tmp_path / "out.zip")
+    with patch("setup_course_github.archive_course.subprocess.run", MagicMock()):
+        archive_course(str(course_dir), output=out, export_html=True)
+
+    assert "HTML exports: 2" in capsys.readouterr().out
+
+
+def test_archive_small_archive_size_reported_in_kb(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A sub-megabyte archive reports its size in KB, not MB.
+
+    Pins the ``zip_size < 1024 * 1024`` threshold: a mutation turning the
+    multiplication into division collapses the threshold to 1 byte, which
+    would misreport every real archive as MB.
+    """
+    course_dir = tmp_path / "mycourse"
+    course_dir.mkdir()
+    (course_dir / "file.txt").write_text("hello world")
+
+    out = str(tmp_path / "out.zip")
+    archive_course(str(course_dir), output=out, export_html=False)
+
+    output = capsys.readouterr().out
+    assert "KB" in output
+    assert "MB" not in output
