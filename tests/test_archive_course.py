@@ -697,3 +697,80 @@ def test_archive_main_passes_no_pdf(tmp_path: Path) -> None:
     mock_archive.assert_called_once_with(
         dirname=str(course), output=None, export_html=True, export_pdf=False
     )
+
+
+def test_archive_pdf_export_count_accumulates_across_notebooks(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Two successful PDF exports are counted as 2, not reset to 1.
+
+    Pins ``pdf_exported += 1`` against a mutation to ``pdf_exported = 1``,
+    which a single-notebook test cannot distinguish (1 == 1).
+    """
+    course = tmp_path / "course"
+    course.mkdir()
+    (course / "lesson1.ipynb").write_text("{}")
+    (course / "lesson2.ipynb").write_text("{}")
+
+    with patch(
+        "setup_course_github.archive_course._export_notebook_to_html",
+        return_value=False,
+    ):
+        with patch(
+            "setup_course_github.archive_course._export_notebook_to_pdf",
+            return_value=True,
+        ):
+            archive_course(str(course), output=str(tmp_path / "out.zip"))
+
+    assert "PDF exports: 2" in capsys.readouterr().out
+
+
+def test_archive_failed_pdf_export_not_counted(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """When every PDF export fails, no 'PDF exports' line appears.
+
+    Pins ``if export_pdf and pdf_exported > 0`` against mutations to
+    ``>= 0`` (which would print ``PDF exports: 0``) and to ``or`` (which
+    would print even though PDF export was requested but produced nothing).
+    """
+    course = tmp_path / "course"
+    course.mkdir()
+    (course / "lesson.ipynb").write_text("{}")
+
+    with patch(
+        "setup_course_github.archive_course._export_notebook_to_html",
+        return_value=False,
+    ):
+        with patch(
+            "setup_course_github.archive_course._export_notebook_to_pdf",
+            return_value=False,
+        ):
+            archive_course(str(course), output=str(tmp_path / "out.zip"))
+
+    assert "PDF exports:" not in capsys.readouterr().out
+
+
+def test_archive_no_pdf_ignores_existing_pdf_file(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """With export_pdf=False, an existing .pdf on disk is not paired in summary.
+
+    Pins ``if export_pdf and pdf_path.exists()`` against a mutation to
+    ``or``, which would pair a stray .pdf even though PDF export was off.
+    """
+    course = tmp_path / "course"
+    course.mkdir()
+    (course / "lesson.ipynb").write_text("{}")
+    (course / "lesson.pdf").write_text("%PDF-fake")
+
+    archive_course(
+        str(course),
+        output=str(tmp_path / "out.zip"),
+        export_html=False,
+        export_pdf=False,
+    )
+
+    output = capsys.readouterr().out
+    assert "lesson.ipynb + lesson.pdf" not in output
+    assert "lesson.ipynb" in output
