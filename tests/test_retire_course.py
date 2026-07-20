@@ -339,7 +339,14 @@ def test_main_calls_retire_course(tmp_path: Path) -> None:
         with patch("sys.argv", ["retire-course", str(tmp_path)]):
             main()
 
-    mock_retire.assert_called_once_with(str(tmp_path), keep_public=False)
+    mock_retire.assert_called_once_with(str(tmp_path), keep_public=False, dry_run=False)
+
+
+def test_main_passes_dry_run(tmp_path: Path) -> None:
+    with patch("setup_course_github.retire_course.retire_course") as mock_retire:
+        with patch("sys.argv", ["retire-course", "--dry-run", str(tmp_path)]):
+            main()
+    mock_retire.assert_called_once_with(str(tmp_path), keep_public=False, dry_run=True)
 
 
 def test_main_requires_dirname() -> None:
@@ -358,9 +365,9 @@ def test_main_multiple_dirs(tmp_path: Path) -> None:
         with patch("sys.argv", ["retire-course", dir1, dir2, dir3]):
             main()
     assert mock_retire.call_count == 3
-    mock_retire.assert_any_call(dir1, keep_public=False)
-    mock_retire.assert_any_call(dir2, keep_public=False)
-    mock_retire.assert_any_call(dir3, keep_public=False)
+    mock_retire.assert_any_call(dir1, keep_public=False, dry_run=False)
+    mock_retire.assert_any_call(dir2, keep_public=False, dry_run=False)
+    mock_retire.assert_any_call(dir3, keep_public=False, dry_run=False)
 
 
 def test_main_continues_on_failure(tmp_path: Path) -> None:
@@ -970,7 +977,7 @@ def test_main_keep_public_flag(tmp_path: Path) -> None:
         with patch("sys.argv", ["retire-course", "--keep-public", str(tmp_path)]):
             main()
 
-    mock_retire.assert_called_once_with(str(tmp_path), keep_public=True)
+    mock_retire.assert_called_once_with(str(tmp_path), keep_public=True, dry_run=False)
 
 
 def test_main_no_keep_public_flag(tmp_path: Path) -> None:
@@ -979,7 +986,7 @@ def test_main_no_keep_public_flag(tmp_path: Path) -> None:
         with patch("sys.argv", ["retire-course", str(tmp_path)]):
             main()
 
-    mock_retire.assert_called_once_with(str(tmp_path), keep_public=False)
+    mock_retire.assert_called_once_with(str(tmp_path), keep_public=False, dry_run=False)
 
 
 # ---------------------------------------------------------------------------

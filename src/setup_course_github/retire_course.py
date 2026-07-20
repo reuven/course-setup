@@ -216,6 +216,12 @@ def main() -> None:
         help="archive without making the GitHub repo private",
     )
     parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        default=False,
+        help="preview the retirement without changing GitHub or moving files",
+    )
+    parser.add_argument(
         "dirnames", nargs="+", help="Path(s) to course directories to retire"
     )
     args = parser.parse_args()
@@ -223,7 +229,7 @@ def main() -> None:
     errors: list[tuple[str, str]] = []
     for dirname in args.dirnames:
         try:
-            retire_course(dirname, keep_public=args.keep_public)
+            retire_course(dirname, keep_public=args.keep_public, dry_run=args.dry_run)
         except Exception as e:
             print(f"Error retiring {dirname}: {e}")
             errors.append((dirname, str(e)))
