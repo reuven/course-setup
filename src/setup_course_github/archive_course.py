@@ -49,10 +49,11 @@ def archive_course(
     dirname: str,
     output: str | None = None,
     export_html: bool = True,
+    export_pdf: bool = True,
 ) -> Path:
     """Create a zip archive of a course directory.
 
-    Optionally exports notebooks to HTML first.
+    Optionally exports notebooks to HTML and/or PDF first.
     """
     course_path = Path(dirname)
     if not course_path.is_dir():
@@ -72,6 +73,14 @@ def archive_course(
         for nb_path in notebooks:
             if _export_notebook_to_html(nb_path, course_path):
                 html_exported += 1
+
+    # Export notebooks to PDF if requested
+    pdf_exported = 0
+    if export_pdf and notebooks:
+        print("Exporting notebooks to PDF...")
+        for nb_path in notebooks:
+            if _export_notebook_to_pdf(nb_path, course_path):
+                pdf_exported += 1
 
     # Determine output path
     if output is not None:
@@ -103,15 +112,17 @@ def archive_course(
         else f"{zip_size / (1024 * 1024):.1f} MB"
     )
 
-    # Collect non-notebook, non-HTML files for the summary
+    # Collect non-notebook, non-HTML, non-PDF files for the summary
     notebook_names = {nb.name for nb in notebooks}
     html_names = {nb.with_suffix(".html").name for nb in notebooks}
+    pdf_names = {nb.with_suffix(".pdf").name for nb in notebooks}
     with zipfile.ZipFile(zip_path, "r") as zf:
         other_files = sorted(
             Path(name).name
             for name in zf.namelist()
             if Path(name).name not in notebook_names
             and Path(name).name not in html_names
+            and Path(name).name not in pdf_names
         )
 
     # Print summary
@@ -122,13 +133,18 @@ def archive_course(
     if notebooks:
         print("Notebooks:")
         for nb in notebooks:
+            parts = [nb.name]
             html_path = nb.with_suffix(".html")
             if export_html and html_path.exists():
-                print(f"  {nb.name} + {html_path.name}")
-            else:
-                print(f"  {nb.name}")
+                parts.append(html_path.name)
+            pdf_path = nb.with_suffix(".pdf")
+            if export_pdf and pdf_path.exists():
+                parts.append(pdf_path.name)
+            print("  " + " + ".join(parts))
     if export_html and html_exported > 0:
         print(f"HTML exports: {html_exported}")
+    if export_pdf and pdf_exported > 0:
+        print(f"PDF exports: {pdf_exported}")
 
     if other_files:
         print("Other files:")
@@ -168,12 +184,19 @@ def main() -> None:
         default=False,
         help="Skip HTML export of notebooks",
     )
+    parser.add_argument(
+        "--no-pdf",
+        action="store_true",
+        default=False,
+        help="Skip PDF export of notebooks",
+    )
     args = parser.parse_args()
 
     archive_course(
         dirname=args.dirname,
         output=args.output,
         export_html=not args.no_html,
+        export_pdf=not args.no_pdf,
     )
 
 
