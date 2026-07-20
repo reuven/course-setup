@@ -1107,6 +1107,91 @@ def test_retire_main_inside_course_prints_hint(
     assert "Traceback" not in captured.err
 
 
+def test_retire_course_dry_run_does_not_move(tmp_path: Path) -> None:
+    course = tmp_path / "mycourse"
+    course.mkdir()
+    with patch(
+        "setup_course_github.retire_course.get_remote_url",
+        return_value="git@github.com:someuser/myrepo.git",
+    ):
+        with patch(
+            "setup_course_github.retire_course.load_config", return_value=FAKE_CONFIG
+        ):
+            with patch("shutil.move") as mock_move:
+                retire_course(str(course), dry_run=True)
+    mock_move.assert_not_called()
+    assert course.exists()
+
+
+def test_retire_course_dry_run_skips_github() -> None:
+    with patch(
+        "setup_course_github.retire_course.get_remote_url",
+        return_value="git@github.com:someuser/myrepo.git",
+    ):
+        with patch("setup_course_github.retire_course.get_github") as mock_gh:
+            with patch(
+                "setup_course_github.retire_course.load_config",
+                return_value=FAKE_CONFIG,
+            ):
+                with patch("shutil.move"):
+                    retire_course("/some/course/dir", dry_run=True)
+    mock_gh.assert_not_called()
+
+
+def test_retire_course_dry_run_skips_confirm_create_dir() -> None:
+    with patch(
+        "setup_course_github.retire_course.get_remote_url",
+        return_value="git@github.com:someuser/myrepo.git",
+    ):
+        with patch(
+            "setup_course_github.retire_course.load_config", return_value=FAKE_CONFIG
+        ):
+            with patch(
+                "setup_course_github.retire_course._confirm_create_dir"
+            ) as mock_confirm:
+                with patch("shutil.move"):
+                    retire_course("/some/course/dir", dry_run=True)
+    mock_confirm.assert_not_called()
+
+
+def test_retire_course_dry_run_prints_banner_and_summary(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    course = tmp_path / "mycourse"
+    course.mkdir()
+    with patch(
+        "setup_course_github.retire_course.get_remote_url",
+        return_value="git@github.com:someuser/myrepo.git",
+    ):
+        with patch(
+            "setup_course_github.retire_course.load_config", return_value=FAKE_CONFIG
+        ):
+            retire_course(str(course), dry_run=True)
+    out = capsys.readouterr().out
+    assert "[DRY RUN]" in out
+    assert "Would retire" in out
+    assert "Retirement Summary" in out
+    # dry run describes intended action: repo would be made private
+    assert "(now private)" in out
+
+
+def test_retire_course_dry_run_keep_public_shows_still_public(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    course = tmp_path / "mycourse"
+    course.mkdir()
+    with patch(
+        "setup_course_github.retire_course.get_remote_url",
+        return_value="git@github.com:someuser/myrepo.git",
+    ):
+        with patch(
+            "setup_course_github.retire_course.load_config", return_value=FAKE_CONFIG
+        ):
+            retire_course(str(course), keep_public=True, dry_run=True)
+    out = capsys.readouterr().out
+    assert "(still public)" in out
+
+
 def test_retire_sibling_dir_does_not_trigger_guard(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

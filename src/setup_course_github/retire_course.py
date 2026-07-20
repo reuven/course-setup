@@ -154,8 +154,14 @@ def _build_retirement_summary(
     return "\n".join(lines)
 
 
-def retire_course(dirname: str, keep_public: bool = False) -> None:
-    """Move the local directory to the archive, optionally making the repo private."""
+def retire_course(
+    dirname: str, keep_public: bool = False, dry_run: bool = False
+) -> None:
+    """Move the local directory to the archive, optionally making the repo private.
+
+    When *dry_run* is True, no repo is modified, no directory is created, and
+    nothing is moved \u2014 only a preview of the intended actions is printed.
+    """
     _check_not_inside_course(dirname)
 
     config = load_config()
@@ -163,13 +169,22 @@ def retire_course(dirname: str, keep_public: bool = False) -> None:
     remote_url = get_remote_url(dirname)
     repo_name = parse_repo_name(remote_url)
 
+    year = datetime.datetime.now().year
+    dest = config.archive_path / str(year)
+
+    if dry_run:
+        summary = _build_retirement_summary(
+            dirname, repo_name, dest, kept_public=keep_public
+        )
+        print(f"[DRY RUN] Would retire {dirname} \u2192 {dest / Path(dirname).name}")
+        print(summary)
+        return
+
     g = get_github()
     repo = g.get_repo(repo_name)
     if not keep_public:
         repo.edit(private=True)
 
-    year = datetime.datetime.now().year
-    dest = config.archive_path / str(year)
     _confirm_create_dir(dest)
 
     summary = _build_retirement_summary(
