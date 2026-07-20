@@ -1076,14 +1076,23 @@ git branch -d feature/list-courses
 - Modify: `src/setup_course_github/archive_course.py` — add `_export_notebook_to_pdf`, `export_pdf` param, `--no-pdf` flag, summary changes.
 - Test: `tests/test_archive_course.py`.
 
-### Task 11: Add `_export_notebook_to_pdf`
+### Task 11: Extract shared `_export_notebook` helper + add `_export_notebook_to_pdf`
+
+To keep DRY (per the pre-flight decision), factor the shared subprocess/try-except
+body of `_export_notebook_to_html` into a single `_export_notebook(nb_path,
+course_path, fmt, label)` helper, and make both `_export_notebook_to_html` and the
+new `_export_notebook_to_pdf` thin one-line callers. The public helper names are
+preserved so existing tests and call sites that patch them keep working.
 
 **Files:**
 - Modify: `src/setup_course_github/archive_course.py`
 - Test: `tests/test_archive_course.py`
 
 **Interfaces:**
-- Produces: `_export_notebook_to_pdf(nb_path: Path, course_path: Path) -> bool`.
+- Produces:
+  - `_export_notebook(nb_path: Path, course_path: Path, fmt: str, label: str) -> bool`
+  - `_export_notebook_to_html(nb_path: Path, course_path: Path) -> bool` (thin caller — unchanged signature)
+  - `_export_notebook_to_pdf(nb_path: Path, course_path: Path) -> bool` (thin caller)
 
 - [ ] **Step 1: Create the feature branch**
 
@@ -1145,17 +1154,26 @@ def test_export_notebook_to_pdf_handles_missing_binary(tmp_path: Path) -> None:
 Run: `uv run pytest tests/test_archive_course.py -k to_pdf -v`
 Expected: FAIL — `cannot import name '_export_notebook_to_pdf'`.
 
-- [ ] **Step 4: Implement the helper**
+- [ ] **Step 4: Refactor to a shared helper and add the PDF caller**
 
-In `src/setup_course_github/archive_course.py`, add after `_export_notebook_to_html` (after line 30):
+In `src/setup_course_github/archive_course.py`, **replace** the entire existing
+`_export_notebook_to_html` function (lines 11-30) with the shared helper plus two
+thin callers:
 
 ```python
-def _export_notebook_to_pdf(nb_path: Path, course_path: Path) -> bool:
-    """Export a single notebook to PDF via webpdf. Returns True on success."""
+def _export_notebook(
+    nb_path: Path, course_path: Path, fmt: str, label: str
+) -> bool:
+    """Export a notebook to *fmt* via nbconvert. Returns True on success.
+
+    *label* is the human-readable format name used in warning messages.
+    """
+    # Use the notebook's relative path from the course dir so nbconvert
+    # can find it regardless of spaces in the name.
     relative = nb_path.relative_to(course_path)
     try:
         subprocess.run(
-            ["uv", "run", "jupyter", "nbconvert", "--to", "webpdf", str(relative)],
+            ["uv", "run", "jupyter", "nbconvert", "--to", fmt, str(relative)],
             cwd=str(course_path),
             capture_output=True,
             check=True,
@@ -1163,17 +1181,37 @@ def _export_notebook_to_pdf(nb_path: Path, course_path: Path) -> bool:
         return True
     except subprocess.CalledProcessError as exc:
         stderr = exc.stderr.decode() if exc.stderr else ""
-        print(f"  Warning: failed to export {nb_path.name} to PDF: {stderr.strip()}")
+        print(
+            f"  Warning: failed to export {nb_path.name} to {label}: {stderr.strip()}"
+        )
         return False
     except FileNotFoundError:
-        print("  Warning: jupyter nbconvert not found, skipping PDF export")
+        print(f"  Warning: jupyter nbconvert not found, skipping {label} export")
         return False
+
+
+def _export_notebook_to_html(nb_path: Path, course_path: Path) -> bool:
+    """Export a single notebook to HTML. Returns True on success."""
+    return _export_notebook(nb_path, course_path, "html", "HTML")
+
+
+def _export_notebook_to_pdf(nb_path: Path, course_path: Path) -> bool:
+    """Export a single notebook to PDF via webpdf. Returns True on success."""
+    return _export_notebook(nb_path, course_path, "webpdf", "PDF")
 ```
 
-- [ ] **Step 5: Run to verify pass**
+Note on preserved behavior: the HTML `FileNotFoundError` message is byte-identical
+to the original (`...skipping HTML export`), and the HTML nbconvert command is
+still `--to html`, so the existing `test_archive_html_export` and
+`test_archive_html_export_jupyter_not_found` assertions continue to hold. The
+HTML `CalledProcessError` message gains ` to HTML` before the colon; no existing
+test asserts that exact wording (they assert only the substring `"Warning"`).
 
-Run: `uv run pytest tests/test_archive_course.py -k to_pdf -v`
-Expected: PASS (3 passed)
+- [ ] **Step 5: Run to verify the new PDF tests pass and existing HTML tests stay green**
+
+Run: `uv run pytest tests/test_archive_course.py -k "to_pdf or html_export" -v`
+Expected: PASS — the 3 new PDF tests pass and the existing HTML-export tests
+still pass (the refactor preserved their behavior).
 
 - [ ] **Step 6: Format, lint, type-check, commit**
 
@@ -1182,7 +1220,7 @@ uv run ruff format src/setup_course_github/archive_course.py tests/test_archive_
 uv run ruff check src/setup_course_github/archive_course.py tests/test_archive_course.py
 uv run mypy --strict src/setup_course_github/archive_course.py
 git add src/setup_course_github/archive_course.py tests/test_archive_course.py
-git commit -m "feat: add _export_notebook_to_pdf helper"
+git commit -m "refactor: share nbconvert export helper; add PDF export helper"
 ```
 
 ### Task 12: Wire PDF export into `archive_course` + summary + `--no-pdf`
@@ -1382,12 +1420,58 @@ And change the `archive_course(...)` call (lines 158-162) to:
     )
 ```
 
-- [ ] **Step 7: Run to verify pass**
+- [ ] **Step 7: Fix existing tests broken by PDF-on-by-default**
+
+Turning PDF on by default changes the behavior of seven pre-existing tests that
+were written when only HTML was default-on. Each must be updated. **These are the
+only pre-existing tests that need changing — do not touch any others.**
+
+Two groups:
+
+**(a) Tests that must now pass `export_pdf=False`** — they either assert the
+nbconvert subprocess call count/args (HTML only) or create a real notebook with
+no subprocess mock (which would otherwise trigger a real `webpdf` run). Add
+`export_pdf=False` to the `archive_course(...)` call in each:
+
+- `test_archive_html_export` — asserts `mock_run.assert_called_once_with(... html ...)`; without this it is now called twice (html + webpdf).
+- `test_archive_no_html_flag` — asserts `mock_run.assert_not_called()`; webpdf would call it.
+- `test_archive_summary_lists_notebooks_and_other_files` — real notebook, no mock; would shell out to webpdf.
+- `test_archive_summary_no_other_files_section_when_only_notebooks` — real notebook, no mock.
+- `test_archive_notebook_with_spaces_in_name` — asserts `mock_run.assert_called_once_with(... html ...)`.
+- `test_archive_no_html_ignores_existing_html_file` — real notebook, no mock; tests summary pairing with export off.
+
+Example (the change is the same shape in each — add the one kwarg):
+
+```python
+    # before
+    archive_course(str(course_dir), output=out, export_html=False)
+    # after
+    archive_course(str(course_dir), output=out, export_html=False, export_pdf=False)
+```
+
+**(b) The `main` call-args test** — `test_main_calls_archive_course` asserts the
+exact kwargs `main` forwards; `main` now also passes `export_pdf`. Update its
+expected call:
+
+```python
+    mock_archive.assert_called_once_with(
+        dirname=str(course_dir),
+        output=None,
+        export_html=True,
+        export_pdf=True,
+    )
+```
+
+Leave all other existing tests unchanged: tests that mock `subprocess.run` with a
+generic `MagicMock` and assert only substrings (e.g. `HTML exports: N`) stay green
+because the extra webpdf call is absorbed by the mock and produces no `.pdf` file.
+
+- [ ] **Step 8: Run to verify pass**
 
 Run: `uv run pytest tests/test_archive_course.py -v`
 Expected: PASS (all)
 
-- [ ] **Step 8: Format, lint, type-check, full suite, commit**
+- [ ] **Step 9: Format, lint, type-check, full suite, commit**
 
 ```bash
 uv run ruff format src/setup_course_github/archive_course.py tests/test_archive_course.py
