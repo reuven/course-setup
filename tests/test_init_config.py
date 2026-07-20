@@ -206,3 +206,9 @@ def test_help_shows_config_path(capsys: pytest.CaptureFixture[str]) -> None:
     captured = capsys.readouterr()
     output = captured.out + captured.err
     assert str(CONFIG_PATH) in output
+
+
+def test_config_template_mentions_course_dirs() -> None:
+    from setup_course_github.init_config import CONFIG_TEMPLATE
+
+    assert "course_dirs" in CONFIG_TEMPLATE

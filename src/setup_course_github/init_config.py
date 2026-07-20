@@ -31,6 +31,14 @@ archive = "/path/to/your/archive"
 # Examples: data files, exercise notebooks, solutions folder
 # additional_files = ["/path/to/exercises", "/path/to/data.csv"]
 
+# Optional: directories that `list-courses` scans for active courses.
+# Each entry is a directory whose immediate subdirectories may be courses
+# (a course = a subdir containing a .git folder and at least one notebook).
+# Examples:
+#   course_dirs = ["~/Courses/Current"]
+#   course_dirs = ["~/Courses/Current", "~/Courses/Consulting"]
+# course_dirs = []
+
 [defaults]
 # Default notebook type when running setup-course.
 # Options: "jupyter" or "marimo"
