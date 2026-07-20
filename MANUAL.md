@@ -16,7 +16,8 @@ repositories. It provides six commands:
 - **`archive-course`** — Create a zip archive of a course directory, exporting
   Jupyter notebooks to HTML and PDF by default.
 - **`list-courses`** — List active and archived courses. Read-only; makes no
-  changes and needs no GitHub token or network access.
+  changes and no GitHub API calls (it reads your config file but does not use
+  the network).
 - **`setup-course-config`** — Generate a starter configuration file.
 
 All six commands support `--version` and `--help`. Both display the version
@@ -602,7 +603,7 @@ retire-course DIRNAME [DIRNAME ...] [--keep-public] [--dry-run] [--version]
 | Option | Required | Description |
 |--------|----------|-------------|
 | `--keep-public` | No | Archive the course without making the GitHub repo private. Useful for courses (e.g., O'Reilly) where the repo should remain publicly accessible. |
-| `--dry-run` | No | Preview the retirement without making any changes: the GitHub repo is not touched, the archive directory is not created, and the course directory is not moved. Prints a `[DRY RUN]` banner followed by the same retirement summary the real run would show. No GitHub token or network access is required. Applies to every directory passed on the command line. |
+| `--dry-run` | No | Preview the retirement without making any changes: the GitHub repo is not touched, the archive directory is not created, and the course directory is not moved. Prints a `[DRY RUN]` banner followed by the same retirement summary the real run would show. Your config file is read, but no GitHub API call is made, so a dry run touches nothing on the network. Applies to every directory passed on the command line. |
 | `--version` | No | Show the version number, PyPI URL, author, and email, then exit. |
 
 #### What it does
@@ -640,7 +641,8 @@ With `--dry-run`, steps 2, 4, and 5 above are skipped entirely -- no GitHub
 API call is made, no directory is created, and nothing is moved. Instead,
 `retire-course` prints a `[DRY RUN]` banner followed by the same retirement
 summary the real run would produce, so you can preview the effect on multiple
-directories with no GitHub token or network access needed.
+directories without any GitHub API calls (your config file is still read, but
+the network is not used).
 
 #### Examples
 

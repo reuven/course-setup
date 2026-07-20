@@ -156,9 +156,9 @@ This will (for each directory):
 With `--dry-run`, none of that happens: the GitHub repo is not touched, the
 archive directory is not created, and the course directory is not moved.
 Instead, `retire-course` prints a `[DRY RUN]` banner followed by the same
-retirement summary the real run would show, so no GitHub token or network
-access is required. `--dry-run` applies to every directory passed on the
-command line.
+retirement summary the real run would show. It reads your config file but makes
+no GitHub API calls, so a dry run touches nothing on the network. `--dry-run`
+applies to every directory passed on the command line.
 
 You can retire multiple courses at once:
 
@@ -205,8 +205,8 @@ other included files.
 list-courses
 ```
 
-A read-only command: nothing is modified, and no GitHub token or network
-access is needed. It lists:
+A read-only command: nothing is modified, and no GitHub API calls are made (it
+reads your config file but does not use the network). It lists:
 
 - **Active courses**: for each scan directory, its immediate subdirectories
   that qualify as a *course* — a directory containing both a `.git`
