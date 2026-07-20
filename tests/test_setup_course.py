@@ -446,6 +446,31 @@ def test_pyproject_toml_marimo_dependency(course_env: dict[str, Any]) -> None:
     assert "jupyter" not in content
 
 
+def test_pyproject_toml_marimo_exact_dep_entries(
+    course_env: dict[str, Any],
+) -> None:
+    """The marimo pyproject.toml lists exactly the ``marimo`` + ``gitautopush`` deps.
+
+    Pins the ``["marimo", "gitautopush"]`` branch against per-name string
+    mutations: a substring check like ``"marimo" in content`` passes even for a
+    mangled ``"XXmarimoXX"``, so assert the exact quoted TOML entries.
+    """
+    sys.argv = [
+        "setup-course",
+        "-c",
+        "acme",
+        "-t",
+        "python",
+        "--notebook-type",
+        "marimo",
+    ]
+    main()
+    dest = course_env["tmp_path"] / "acme-python-2026-03"
+    content = (dest / "pyproject.toml").read_text()
+    assert '"marimo",' in content
+    assert '"gitautopush",' in content
+
+
 def test_pyproject_toml_always_has_gitautopush(course_env: dict[str, Any]) -> None:
     """gitautopush is always in pyproject.toml dependencies."""
     for notebook_type in ("jupyter", "marimo"):
@@ -673,6 +698,35 @@ def test_readme_from_url(course_env: dict[str, Any]) -> None:
     dest = course_env["tmp_path"] / "acme-python-2026-03"
     readme = dest / "README.md"
     assert readme.exists()
+    assert readme.read_text() == fetched_content
+
+
+def test_readme_from_http_url(course_env: dict[str, Any]) -> None:
+    """An http:// (not https://) readme_source is still fetched over the network.
+
+    Pins the ``"http://"`` entry in the ``startswith((...))`` scheme check: a
+    mutation to that literal makes an http:// source fall through to the
+    local-file branch. The https-only test cannot catch it.
+    """
+    url = "http://example.com/my-readme.md"
+    fetched_content = "# README over http\nPlain http content.\n"
+    course_env["config"].readme_source = url
+
+    with patch(
+        "setup_course_github.setup_course.urllib.request.urlopen"
+    ) as mock_urlopen:
+        mock_response = MagicMock()
+        mock_response.read.return_value = fetched_content.encode("utf-8")
+        mock_response.__enter__ = MagicMock(return_value=mock_response)
+        mock_response.__exit__ = MagicMock(return_value=False)
+        mock_urlopen.return_value = mock_response
+
+        sys.argv = ["setup-course", "-c", "acme", "-t", "python"]
+        main()
+
+    assert mock_urlopen.called
+    dest = course_env["tmp_path"] / "acme-python-2026-03"
+    readme = dest / "README.md"
     assert readme.read_text() == fetched_content
 
 
@@ -1401,6 +1455,36 @@ def test_add_imports_marimo_with_data(course_env: dict[str, Any]) -> None:
     assert "import marimo" in content
 
 
+def test_add_imports_multiple_extras_groups_includes_all(
+    course_env: dict[str, Any],
+) -> None:
+    """Imports from every --extras group appear, not just the last one.
+
+    Pins ``all_expanded_groups |= expanded``: a mutation to ``=`` keeps only
+    the final group's expansion, dropping earlier groups' imports. A single
+    -extras group cannot detect this; two groups can.
+    """
+    sys.argv = [
+        "setup-course",
+        "-c",
+        "acme",
+        "-t",
+        "python",
+        "--extras",
+        "data",
+        "viz",
+        "--add-imports",
+    ]
+    main()
+    dest = course_env["tmp_path"] / "acme-python-2026-03"
+    content = (dest / "acme-python-2026-03-19.ipynb").read_text()
+    # From the "data" group (dropped if the set-union becomes assignment):
+    assert "import numpy as np" in content
+    assert "import pandas as pd" in content
+    # From the "viz" group:
+    assert "import matplotlib.pyplot as plt" in content
+
+
 def test_add_imports_without_extras_is_noop(course_env: dict[str, Any]) -> None:
     """--add-imports without --extras doesn't add any imports."""
     sys.argv = ["setup-course", "-c", "acme", "-t", "python", "--add-imports"]
@@ -1776,6 +1860,33 @@ def test_dry_run_marimo_shows_py_extension(
     output = capsys.readouterr().out
     assert "acme-python-2026-03-19.py" in output
     assert "marimo" in output
+
+
+def test_dry_run_marimo_dependencies_exact(
+    course_env: dict[str, Any],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """--dry-run for a marimo course lists exactly marimo + gitautopush deps.
+
+    Pins the marimo ``["marimo", "gitautopush"]`` dry-run branch. Asserting the
+    full "Dependencies:" line (not just that "marimo" appears somewhere, which
+    the "Notebook type: marimo" line already guarantees) catches per-name
+    string mutations, and confirms the jupyter-only ipyparallel is absent.
+    """
+    sys.argv = [
+        "setup-course",
+        "-c",
+        "acme",
+        "-t",
+        "python",
+        "--notebook-type",
+        "marimo",
+        "--dry-run",
+    ]
+    main()
+    output = capsys.readouterr().out
+    assert "Dependencies: marimo, gitautopush" in output
+    assert "ipyparallel" not in output
 
 
 # ---------------------------------------------------------------------------
@@ -2387,6 +2498,23 @@ def test_notebook_dates_weekly_skip_weekends() -> None:
         datetime.date(2026, 3, 23),  # Mon (advanced from Sat)
         datetime.date(2026, 3, 30),  # Mon (+7)
         datetime.date(2026, 4, 6),  # Mon (+7)
+    ]
+
+
+def test_notebook_dates_start_on_sunday_standard_weekend() -> None:
+    """Starting on a Sunday advances by exactly one day to Monday.
+
+    Pins the ``d += timedelta(days=1)`` step in the skip-advance loop against
+    a mutation to ``days=2``. Consecutive-weekend cases entered from Saturday
+    cannot catch it (Sat +1 +1 and Sat +2 both land on Monday); entering the
+    skip run on its *last* day (Sunday) is what exposes the overshoot.
+    """
+    # Mar 22 2026 = Sunday (weekday 6); standard weekend skips {5, 6}
+    start = datetime.date(2026, 3, 22)
+    result = _notebook_dates(start, 2, "daily", {5, 6})
+    assert result == [
+        datetime.date(2026, 3, 23),  # Mon (Sun +1, not Tue via +2)
+        datetime.date(2026, 3, 24),  # Tue
     ]
 
 

@@ -1,3 +1,4 @@
+import subprocess
 import zipfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -67,7 +68,7 @@ def test_archive_html_export(tmp_path: Path) -> None:
     out = str(tmp_path / "out.zip")
     mock_run = MagicMock()
     with patch("setup_course_github.archive_course.subprocess.run", mock_run):
-        archive_course(str(course_dir), output=out, export_html=True)
+        archive_course(str(course_dir), output=out, export_html=True, export_pdf=False)
 
     mock_run.assert_called_once_with(
         ["uv", "run", "jupyter", "nbconvert", "--to", "html", "lesson.ipynb"],
@@ -86,7 +87,7 @@ def test_archive_no_html_flag(tmp_path: Path) -> None:
     out = str(tmp_path / "out.zip")
     mock_run = MagicMock()
     with patch("setup_course_github.archive_course.subprocess.run", mock_run):
-        archive_course(str(course_dir), output=out, export_html=False)
+        archive_course(str(course_dir), output=out, export_html=False, export_pdf=False)
 
     mock_run.assert_not_called()
 
@@ -171,7 +172,7 @@ def test_archive_summary_lists_notebooks_and_other_files(
     (course_dir / "helper.py").write_text("x = 1")
 
     out = str(tmp_path / "mycourse.zip")
-    archive_course(str(course_dir), output=out, export_html=False)
+    archive_course(str(course_dir), output=out, export_html=False, export_pdf=False)
 
     captured = capsys.readouterr()
     assert "Notebooks:" in captured.out
@@ -189,7 +190,7 @@ def test_archive_summary_no_other_files_section_when_only_notebooks(
     (course_dir / "lesson.ipynb").write_text('{"cells": []}')
 
     out = str(tmp_path / "mycourse.zip")
-    archive_course(str(course_dir), output=out, export_html=False)
+    archive_course(str(course_dir), output=out, export_html=False, export_pdf=False)
 
     captured = capsys.readouterr()
     assert "Notebooks:" in captured.out
@@ -215,6 +216,7 @@ def test_main_calls_archive_course(tmp_path: Path) -> None:
         dirname=str(course_dir),
         output=None,
         export_html=True,
+        export_pdf=True,
     )
 
 
@@ -310,6 +312,55 @@ def test_archive_html_export_jupyter_not_found(
     assert "jupyter nbconvert not found" in output
 
 
+def test_export_notebook_to_pdf_runs_webpdf(tmp_path: Path) -> None:
+    from setup_course_github.archive_course import _export_notebook_to_pdf
+
+    course = tmp_path / "course"
+    course.mkdir()
+    nb = course / "lesson.ipynb"
+    nb.write_text("{}")
+    with patch("subprocess.run") as mock_run:
+        result = _export_notebook_to_pdf(nb, course)
+    assert result is True
+    args = mock_run.call_args
+    assert args.kwargs["cwd"] == str(course)
+    cmd = args.args[0]
+    assert cmd == [
+        "uv",
+        "run",
+        "jupyter",
+        "nbconvert",
+        "--to",
+        "webpdf",
+        "lesson.ipynb",
+    ]
+
+
+def test_export_notebook_to_pdf_handles_called_process_error(tmp_path: Path) -> None:
+    from setup_course_github.archive_course import _export_notebook_to_pdf
+
+    course = tmp_path / "course"
+    course.mkdir()
+    nb = course / "lesson.ipynb"
+    nb.write_text("{}")
+    err = subprocess.CalledProcessError(1, "nbconvert", stderr=b"chromium missing")
+    with patch("subprocess.run", side_effect=err):
+        result = _export_notebook_to_pdf(nb, course)
+    assert result is False
+
+
+def test_export_notebook_to_pdf_handles_missing_binary(tmp_path: Path) -> None:
+    from setup_course_github.archive_course import _export_notebook_to_pdf
+
+    course = tmp_path / "course"
+    course.mkdir()
+    nb = course / "lesson.ipynb"
+    nb.write_text("{}")
+    with patch("subprocess.run", side_effect=FileNotFoundError()):
+        result = _export_notebook_to_pdf(nb, course)
+    assert result is False
+
+
 def test_archive_notebook_with_spaces_in_name(tmp_path: Path) -> None:
     """Notebooks with spaces in filenames are handled correctly."""
     course_dir = tmp_path / "mycourse"
@@ -320,7 +371,7 @@ def test_archive_notebook_with_spaces_in_name(tmp_path: Path) -> None:
     out = str(tmp_path / "out.zip")
     mock_run = MagicMock()
     with patch("setup_course_github.archive_course.subprocess.run", mock_run):
-        archive_course(str(course_dir), output=out, export_html=True)
+        archive_course(str(course_dir), output=out, export_html=True, export_pdf=False)
 
     # Should pass relative path, not absolute
     mock_run.assert_called_once_with(
@@ -493,7 +544,7 @@ def test_archive_no_html_ignores_existing_html_file(
     (course_dir / "lesson.html").write_text("<html></html>")
 
     out = str(tmp_path / "out.zip")
-    archive_course(str(course_dir), output=out, export_html=False)
+    archive_course(str(course_dir), output=out, export_html=False, export_pdf=False)
 
     output = capsys.readouterr().out
     assert "lesson.ipynb + lesson.html" not in output
@@ -518,3 +569,208 @@ def test_archive_excludes_checkpoint_notebooks_from_html(
     output = capsys.readouterr().out
     assert "HTML exports: 1" in output
     assert "checkpoint" not in output
+
+
+def test_archive_html_export_count_accumulates_across_notebooks(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Two successful exports are counted as 2, not reset to 1.
+
+    Pins ``html_exported += 1`` against a mutation to ``html_exported = 1``,
+    which a single-notebook test cannot distinguish (1 == 1).
+    """
+    course_dir = tmp_path / "mycourse"
+    course_dir.mkdir()
+    (course_dir / "lesson1.ipynb").write_text('{"cells": []}')
+    (course_dir / "lesson2.ipynb").write_text('{"cells": []}')
+
+    out = str(tmp_path / "out.zip")
+    with patch("setup_course_github.archive_course.subprocess.run", MagicMock()):
+        archive_course(str(course_dir), output=out, export_html=True)
+
+    assert "HTML exports: 2" in capsys.readouterr().out
+
+
+def test_archive_small_archive_size_reported_in_kb(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A sub-megabyte archive reports its size in KB, not MB.
+
+    Pins the ``zip_size < 1024 * 1024`` threshold: a mutation turning the
+    multiplication into division collapses the threshold to 1 byte, which
+    would misreport every real archive as MB.
+    """
+    course_dir = tmp_path / "mycourse"
+    course_dir.mkdir()
+    (course_dir / "file.txt").write_text("hello world")
+
+    out = str(tmp_path / "out.zip")
+    archive_course(str(course_dir), output=out, export_html=False)
+
+    output = capsys.readouterr().out
+    assert "KB" in output
+    assert "MB" not in output
+
+
+def test_archive_exports_pdf_by_default(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from setup_course_github.archive_course import archive_course
+
+    course = tmp_path / "course"
+    course.mkdir()
+    (course / "lesson.ipynb").write_text("{}")
+
+    def fake_pdf(nb_path: Path, course_path: Path) -> bool:
+        nb_path.with_suffix(".pdf").write_text("%PDF-fake")
+        return True
+
+    with patch(
+        "setup_course_github.archive_course._export_notebook_to_html",
+        return_value=False,
+    ):
+        with patch(
+            "setup_course_github.archive_course._export_notebook_to_pdf",
+            side_effect=fake_pdf,
+        ) as mock_pdf:
+            archive_course(str(course), output=str(tmp_path / "out.zip"))
+    assert mock_pdf.called
+    out = capsys.readouterr().out
+    assert "PDF exports: 1" in out
+
+
+def test_archive_no_pdf_skips_export(tmp_path: Path) -> None:
+    from setup_course_github.archive_course import archive_course
+
+    course = tmp_path / "course"
+    course.mkdir()
+    (course / "lesson.ipynb").write_text("{}")
+    with patch(
+        "setup_course_github.archive_course._export_notebook_to_html",
+        return_value=False,
+    ):
+        with patch(
+            "setup_course_github.archive_course._export_notebook_to_pdf"
+        ) as mock_pdf:
+            archive_course(
+                str(course), output=str(tmp_path / "out.zip"), export_pdf=False
+            )
+    mock_pdf.assert_not_called()
+
+
+def test_archive_summary_lists_pdf_next_to_notebook(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from setup_course_github.archive_course import archive_course
+
+    course = tmp_path / "course"
+    course.mkdir()
+    (course / "lesson.ipynb").write_text("{}")
+
+    def fake_pdf(nb_path: Path, course_path: Path) -> bool:
+        nb_path.with_suffix(".pdf").write_text("%PDF-fake")
+        return True
+
+    with patch(
+        "setup_course_github.archive_course._export_notebook_to_html",
+        return_value=False,
+    ):
+        with patch(
+            "setup_course_github.archive_course._export_notebook_to_pdf",
+            side_effect=fake_pdf,
+        ):
+            archive_course(str(course), output=str(tmp_path / "out.zip"))
+    out = capsys.readouterr().out
+    assert "lesson.ipynb + lesson.pdf" in out
+    # the pdf must not be reported under "Other files"
+    assert "Other files:" not in out
+
+
+def test_archive_main_passes_no_pdf(tmp_path: Path) -> None:
+    from setup_course_github.archive_course import main
+
+    course = tmp_path / "course"
+    course.mkdir()
+    with patch("setup_course_github.archive_course.archive_course") as mock_archive:
+        with patch("sys.argv", ["archive-course", "--no-pdf", str(course)]):
+            main()
+    mock_archive.assert_called_once_with(
+        dirname=str(course), output=None, export_html=True, export_pdf=False
+    )
+
+
+def test_archive_pdf_export_count_accumulates_across_notebooks(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Two successful PDF exports are counted as 2, not reset to 1.
+
+    Pins ``pdf_exported += 1`` against a mutation to ``pdf_exported = 1``,
+    which a single-notebook test cannot distinguish (1 == 1).
+    """
+    course = tmp_path / "course"
+    course.mkdir()
+    (course / "lesson1.ipynb").write_text("{}")
+    (course / "lesson2.ipynb").write_text("{}")
+
+    with patch(
+        "setup_course_github.archive_course._export_notebook_to_html",
+        return_value=False,
+    ):
+        with patch(
+            "setup_course_github.archive_course._export_notebook_to_pdf",
+            return_value=True,
+        ):
+            archive_course(str(course), output=str(tmp_path / "out.zip"))
+
+    assert "PDF exports: 2" in capsys.readouterr().out
+
+
+def test_archive_failed_pdf_export_not_counted(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """When every PDF export fails, no 'PDF exports' line appears.
+
+    Pins ``if export_pdf and pdf_exported > 0`` against mutations to
+    ``>= 0`` (which would print ``PDF exports: 0``) and to ``or`` (which
+    would print even though PDF export was requested but produced nothing).
+    """
+    course = tmp_path / "course"
+    course.mkdir()
+    (course / "lesson.ipynb").write_text("{}")
+
+    with patch(
+        "setup_course_github.archive_course._export_notebook_to_html",
+        return_value=False,
+    ):
+        with patch(
+            "setup_course_github.archive_course._export_notebook_to_pdf",
+            return_value=False,
+        ):
+            archive_course(str(course), output=str(tmp_path / "out.zip"))
+
+    assert "PDF exports:" not in capsys.readouterr().out
+
+
+def test_archive_no_pdf_ignores_existing_pdf_file(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """With export_pdf=False, an existing .pdf on disk is not paired in summary.
+
+    Pins ``if export_pdf and pdf_path.exists()`` against a mutation to
+    ``or``, which would pair a stray .pdf even though PDF export was off.
+    """
+    course = tmp_path / "course"
+    course.mkdir()
+    (course / "lesson.ipynb").write_text("{}")
+    (course / "lesson.pdf").write_text("%PDF-fake")
+
+    archive_course(
+        str(course),
+        output=str(tmp_path / "out.zip"),
+        export_html=False,
+        export_pdf=False,
+    )
+
+    output = capsys.readouterr().out
+    assert "lesson.ipynb + lesson.pdf" not in output
+    assert "lesson.ipynb" in output

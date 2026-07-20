@@ -3,20 +3,24 @@
 ## Overview
 
 `course-setup` is a command-line toolkit for managing GitHub-backed course
-repositories. It provides five commands:
+repositories. It provides six commands:
 
 - **`setup-course`** — Create a new course directory with a notebook, a
   `pyproject.toml`, a Git repo, and a matching GitHub repo (public or private).
 - **`retire-course`** — Archive a finished course by making its GitHub repo
-  private and moving the local directory into a dated archive folder.
+  private and moving the local directory into a dated archive folder. Supports
+  `--dry-run` to preview the retirement without changing anything.
 - **`unretire-course`** — Restore a previously retired course by making its
   GitHub repo public again and moving the directory back to your working
   directory.
-- **`archive-course`** — Create a zip archive of a course directory, optionally
-  exporting Jupyter notebooks to HTML.
+- **`archive-course`** — Create a zip archive of a course directory, exporting
+  Jupyter notebooks to HTML and PDF by default.
+- **`list-courses`** — List active and archived courses. Read-only; makes no
+  changes and no GitHub API calls (it reads your config file but does not use
+  the network).
 - **`setup-course-config`** — Generate a starter configuration file.
 
-All five commands support `--version` and `--help`. Both display the version
+All six commands support `--version` and `--help`. Both display the version
 number, PyPI URL, author name (Reuven Lerner), and email address:
 
 ```
@@ -24,6 +28,7 @@ setup-course --version
 retire-course --version
 unretire-course --version
 archive-course --version
+list-courses --version
 setup-course-config --version
 ```
 
@@ -59,13 +64,14 @@ projects), the recommended way to install it is as a
 uv tool install course-setup
 ```
 
-This installs it in an isolated environment and makes the five commands
+This installs it in an isolated environment and makes the six commands
 available globally on your PATH:
 
 - `setup-course`
 - `retire-course`
 - `unretire-course`
 - `archive-course`
+- `list-courses`
 - `setup-course-config`
 
 To upgrade later:
@@ -171,6 +177,14 @@ archive = "/path/to/your/archive"
 # Examples: data files, exercise notebooks, solutions folder
 # additional_files = ["/path/to/exercises", "/path/to/data.csv"]
 
+# Optional: directories that `list-courses` scans for active courses.
+# Each entry is a directory whose immediate subdirectories may be courses
+# (a course = a subdir containing a .git folder and at least one notebook).
+# Examples:
+#   course_dirs = ["~/Courses/Current"]
+#   course_dirs = ["~/Courses/Current", "~/Courses/Consulting"]
+# course_dirs = []
+
 [defaults]
 # Default notebook type when running setup-course.
 # Options: "jupyter" or "marimo"
@@ -213,6 +227,7 @@ Fill in each section:
 | `[paths] archive` | Yes | Absolute path to the directory where retired courses are stored. |
 | `[paths] readme_source` | No | Path or URL to a custom README.md. When set, `setup-course` uses this instead of the bundled default. Can be a local file path or an `https://` URL. |
 | `[paths] additional_files` | No | List of file or directory paths to copy into every new course directory after template setup. Directories are copied recursively. This is additive -- the listed items are copied alongside the standard template files, not in place of them. |
+| `[paths] course_dirs` | No | List of directories that `list-courses` scans for active courses (e.g. `["~/Courses/Current"]`). `~` is expanded. Overridden by positional directory arguments on the `list-courses` command line. Defaults to the current directory if unset and no positional arguments are given. |
 | `[defaults] notebook_type` | No | `"jupyter"` (default) or `"marimo"`. Controls which kind of notebook file `setup-course` creates. |
 | `[defaults] verbose` | No | `true` or `false` (default). When `true`, `setup-course` prints detailed output by default. Can be overridden with `-v` on the command line. |
 | `[defaults] private` | No | `true` or `false` (default). When `true`, `setup-course` creates private GitHub repos by default. Can be overridden with `--private` on the command line. |
@@ -574,7 +589,7 @@ warning is printed and the remaining cleanup actions still execute.
 #### Synopsis
 
 ```
-retire-course DIRNAME [DIRNAME ...] [--keep-public] [--version]
+retire-course DIRNAME [DIRNAME ...] [--keep-public] [--dry-run] [--version]
 ```
 
 #### Arguments
@@ -588,6 +603,7 @@ retire-course DIRNAME [DIRNAME ...] [--keep-public] [--version]
 | Option | Required | Description |
 |--------|----------|-------------|
 | `--keep-public` | No | Archive the course without making the GitHub repo private. Useful for courses (e.g., O'Reilly) where the repo should remain publicly accessible. |
+| `--dry-run` | No | Preview the retirement without making any changes: the GitHub repo is not touched, the archive directory is not created, and the course directory is not moved. Prints a `[DRY RUN]` banner followed by the same retirement summary the real run would show. Your config file is read, but no GitHub API call is made, so a dry run touches nothing on the network. Applies to every directory passed on the command line. |
 | `--version` | No | Show the version number, PyPI URL, author, and email, then exit. |
 
 #### What it does
@@ -621,6 +637,13 @@ For each directory:
 If any directory fails, the remaining directories are still processed and all
 errors are reported at the end.
 
+With `--dry-run`, steps 2, 4, and 5 above are skipped entirely -- no GitHub
+API call is made, no directory is created, and nothing is moved. Instead,
+`retire-course` prints a `[DRY RUN]` banner followed by the same retirement
+summary the real run would produce, so you can preview the effect on multiple
+directories without any GitHub API calls (your config file is still read, but
+the network is not used).
+
 #### Examples
 
 Single course:
@@ -646,6 +669,16 @@ retire-course --keep-public ./OReilly-python-2026-03
 ```
 
 This archives the directory but leaves the GitHub repo publicly accessible.
+
+Preview a retirement without changing anything:
+
+```
+retire-course --dry-run ./Acme-2026-03 ./Beta-2026-03
+```
+
+Prints a `[DRY RUN]` banner and the retirement summary for each directory;
+the GitHub repos stay untouched and neither directory is moved. `--dry-run`
+combines with `--keep-public` if you want to preview a public-repo retirement.
 
 #### Requirements
 
@@ -720,7 +753,7 @@ working directory and makes the GitHub repo public.
 #### Synopsis
 
 ```
-archive-course DIRNAME [--output PATH] [--no-html] [--version]
+archive-course DIRNAME [--output PATH] [--no-html] [--no-pdf] [--version]
 ```
 
 #### Arguments
@@ -735,6 +768,7 @@ archive-course DIRNAME [--output PATH] [--no-html] [--version]
 |--------|----------|-------------|
 | `--output`, `-o` | No | Custom output path for the zip file. Defaults to `{dirname}.zip` in the current working directory. |
 | `--no-html` | No | Skip HTML export of Jupyter notebooks. By default, each `.ipynb` file is exported to HTML via `nbconvert` and both the `.ipynb` and `.html` are included in the zip. |
+| `--no-pdf` | No | Skip PDF export of Jupyter notebooks. By default, each `.ipynb` file is also exported to PDF (see below) and included alongside the `.ipynb`/`.html` files. |
 | `--version` | No | Show the version number, PyPI URL, author, and email, then exit. |
 
 #### What it does
@@ -743,27 +777,53 @@ archive-course DIRNAME [--output PATH] [--no-html] [--version]
    (recursively).
 2. **Exports each notebook to HTML** using `uv run jupyter nbconvert --to html`.
    This step is skipped if `--no-html` is passed or if no notebooks are found.
-3. **Creates a zip archive** containing all files in the course directory
-   (including the generated `.html` files), excluding `.git`, `.venv`,
-   `__pycache__`, and `.ipynb_checkpoints` directories. The archive preserves
-   the directory structure, with the course directory as the top-level folder
-   inside the zip.
-4. **Prints a summary** showing:
+3. **Exports each notebook to PDF** using
+   `uv run jupyter nbconvert --to webpdf`, which renders the PDF with headless
+   Chromium instead of requiring a LaTeX installation. This is **on by
+   default**; pass `--no-pdf` to skip it, or it is skipped automatically if no
+   notebooks are found. See [PDF export requirements](#pdf-export-requirements)
+   below for one-time setup and failure behavior.
+4. **Creates a zip archive** containing all files in the course directory
+   (including the generated `.html` and `.pdf` files), excluding `.git`,
+   `.venv`, `__pycache__`, and `.ipynb_checkpoints` directories. The archive
+   preserves the directory structure, with the course directory as the
+   top-level folder inside the zip.
+5. **Prints a summary** showing:
    - Archive path and file count
    - Archive size (displayed in KB or MB)
-   - List of notebooks and their corresponding HTML exports
+   - List of notebooks and their corresponding HTML/PDF exports, shown as
+     `notebook.ipynb + notebook.html + notebook.pdf`
+   - `HTML exports: N` and `PDF exports: N` counts
    - List of all other included files (`.py`, `.csv`, `.toml`, etc.)
+
+#### PDF export requirements
+
+PDF export uses `nbconvert`'s `webpdf` exporter, which drives a headless
+Chromium browser instead of requiring a LaTeX toolchain. The first time you
+export to PDF in a given course environment, you may need to download the
+Chromium binary:
+
+```
+uv run playwright install chromium
+```
+
+If the PDF engine isn't available (Chromium not installed, or `nbconvert`
+itself missing), `archive-course` prints a warning and skips PDF export for
+that notebook rather than failing -- the rest of the archive (HTML exports
+and the zip itself) is still produced normally. Use `--no-pdf` to opt out of
+PDF export entirely, e.g. on machines where installing Chromium isn't
+practical.
 
 #### Examples
 
-Archive a course with HTML exports (default):
+Archive a course with HTML and PDF exports (default):
 
 ```
 archive-course ./Acme-python-intro-2026-03
 ```
 
 Creates `Acme-python-intro-2026-03.zip` containing all course files plus HTML
-versions of every notebook.
+and PDF versions of every notebook.
 
 Archive to a custom path:
 
@@ -777,7 +837,97 @@ Skip HTML export:
 archive-course ./Acme-python-intro-2026-03 --no-html
 ```
 
-Creates the zip with all course files but skips the HTML conversion step.
+Creates the zip with all course files but skips the HTML conversion step
+(PDF export still runs).
+
+Skip PDF export:
+
+```
+archive-course ./Acme-python-intro-2026-03 --no-pdf
+```
+
+Creates the zip with all course files but skips the PDF conversion step
+(HTML export still runs). Useful if Chromium isn't installed and you don't
+want to see the per-notebook warning.
+
+---
+
+### `list-courses` -- List active and archived courses
+
+#### Synopsis
+
+```
+list-courses [DIR ...] [--version]
+```
+
+#### Arguments
+
+| Argument | Required | Description |
+|----------|----------|-------------|
+| `DIR...` | No | Directories to scan for active courses. Overrides `course_dirs` from the config file. |
+
+#### Options
+
+| Option | Required | Description |
+|--------|----------|-------------|
+| `--version` | No | Show the version number, PyPI URL, author, and email, then exit. |
+
+#### What it does
+
+`list-courses` is read-only -- it never modifies files, moves directories, or
+contacts GitHub.
+
+1. **Resolves which directories to scan** in this order: directories passed
+   as positional arguments; otherwise `[paths] course_dirs` from the config
+   file; otherwise the current directory.
+2. **Finds active courses**: for each scan directory, its immediate
+   subdirectories that qualify as a *course* -- a directory containing both a
+   `.git` subdirectory and at least one notebook (`.ipynb`, or a marimo
+   `.py`).
+3. **Finds archived courses**: directories found under
+   `{archive}/{year}/{course}`, using the `[paths] archive` directory from
+   your config file, grouped by year.
+4. **Prints both lists**. Each course is shown as:
+
+   ```
+   name — N notebooks (first-date → last-date)
+   ```
+
+   with the date range parsed from notebook filenames (`n/a` if none match).
+   If there are no active courses, it prints `No active courses found`;
+   if there are no archived courses, it prints `No archived courses found`.
+
+#### Examples
+
+List courses using the configured `course_dirs`:
+
+```
+list-courses
+```
+
+```
+Active courses:
+  Acme-python-intro-2026-03 — 5 notebooks (2026-03-17 → 2026-03-21)
+  Beta-pandas-2026-02 — 3 notebooks (2026-02-02 → 2026-02-16)
+
+Archived courses:
+  2025:
+    Gamma-sql-2025-11 — 4 notebooks (2025-11-03 → 2025-11-24)
+```
+
+List one or more specific directories, overriding the config:
+
+```
+list-courses ~/Courses/Current ~/Courses/Consulting
+```
+
+#### Requirements
+
+- `[paths] course_dirs` is optional in the config file; without it (and
+  without positional directory arguments) `list-courses` scans only the
+  current directory.
+- `[paths] archive` must be set for archived courses to be found (the same
+  setting used by `retire-course` and `unretire-course`).
 
 ---
 

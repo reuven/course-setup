@@ -12,6 +12,7 @@ from pathlib import Path
 
 from setup_course_github import __author__, __email__, __version__, get_github
 from setup_course_github.config import load_config
+from setup_course_github.notebooks import date_range, find_notebooks
 
 
 class InsideCourseDirectoryError(RuntimeError):
@@ -77,15 +78,6 @@ def _confirm_create_dir(dest: Path, confirm: Callable[[str], str] = input) -> No
             raise RuntimeError(f"Aborted: archive directory {dest} not created")
 
 
-def _is_marimo_notebook(path: Path) -> bool:
-    """Return True if a .py file looks like a marimo notebook."""
-    try:
-        text = path.read_text(encoding="utf-8")
-    except (OSError, UnicodeDecodeError):
-        return False
-    return "import marimo" in text and "marimo.App()" in text
-
-
 def _build_retirement_summary(
     dirname: str, repo_name: str, dest: Path, *, kept_public: bool = False
 ) -> str:
@@ -96,8 +88,7 @@ def _build_retirement_summary(
     dirpath = Path(dirname)
 
     # --- count notebooks ---------------------------------------------------
-    ipynb_files = list(dirpath.glob("*.ipynb"))
-    marimo_files = [p for p in dirpath.glob("*.py") if _is_marimo_notebook(p)]
+    ipynb_files, marimo_files = find_notebooks(dirpath)
     nb_count = len(ipynb_files) + len(marimo_files)
 
     if ipynb_files and marimo_files:
@@ -110,17 +101,7 @@ def _build_retirement_summary(
         nb_label = "0"
 
     # --- date range from filenames -----------------------------------------
-    date_pattern = re.compile(r"(\d{4}-\d{2}-\d{2})\.\w+$")
-    dates: list[str] = []
-    for p in ipynb_files + marimo_files:
-        m = date_pattern.search(p.name)
-        if m:
-            dates.append(m.group(1))
-    dates.sort()
-    if dates:
-        date_range = f"{dates[0]} \u2192 {dates[-1]}"
-    else:
-        date_range = "n/a"
+    date_range_str = date_range(ipynb_files + marimo_files)
 
     # --- dependencies from pyproject.toml ----------------------------------
     pyproject_path = dirpath / "pyproject.toml"
@@ -144,7 +125,7 @@ def _build_retirement_summary(
         "\u2500\u2500 Retirement Summary \u2500\u2500",
         f"  Course: {dirpath.name}",
         f"  Notebooks: {nb_label}",
-        f"  Date range: {date_range}",
+        f"  Date range: {date_range_str}",
         f"  Dependencies: {deps_str}",
         f"  Archived to: {dest / dirpath.name}",
         f"  GitHub repo: {repo_url} (still public)"
@@ -154,8 +135,14 @@ def _build_retirement_summary(
     return "\n".join(lines)
 
 
-def retire_course(dirname: str, keep_public: bool = False) -> None:
-    """Move the local directory to the archive, optionally making the repo private."""
+def retire_course(
+    dirname: str, keep_public: bool = False, dry_run: bool = False
+) -> None:
+    """Move the local directory to the archive, optionally making the repo private.
+
+    When *dry_run* is True, no repo is modified, no directory is created, and
+    nothing is moved \u2014 only a preview of the intended actions is printed.
+    """
     _check_not_inside_course(dirname)
 
     config = load_config()
@@ -163,13 +150,22 @@ def retire_course(dirname: str, keep_public: bool = False) -> None:
     remote_url = get_remote_url(dirname)
     repo_name = parse_repo_name(remote_url)
 
+    year = datetime.datetime.now().year
+    dest = config.archive_path / str(year)
+
+    if dry_run:
+        summary = _build_retirement_summary(
+            dirname, repo_name, dest, kept_public=keep_public
+        )
+        print(f"[DRY RUN] Would retire {dirname} \u2192 {dest / Path(dirname).name}")
+        print(summary)
+        return
+
     g = get_github()
     repo = g.get_repo(repo_name)
     if not keep_public:
         repo.edit(private=True)
 
-    year = datetime.datetime.now().year
-    dest = config.archive_path / str(year)
     _confirm_create_dir(dest)
 
     summary = _build_retirement_summary(
@@ -201,6 +197,12 @@ def main() -> None:
         help="archive without making the GitHub repo private",
     )
     parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        default=False,
+        help="preview the retirement without changing GitHub or moving files",
+    )
+    parser.add_argument(
         "dirnames", nargs="+", help="Path(s) to course directories to retire"
     )
     args = parser.parse_args()
@@ -208,7 +210,7 @@ def main() -> None:
     errors: list[tuple[str, str]] = []
     for dirname in args.dirnames:
         try:
-            retire_course(dirname, keep_public=args.keep_public)
+            retire_course(dirname, keep_public=args.keep_public, dry_run=args.dry_run)
         except Exception as e:
             print(f"Error retiring {dirname}: {e}")
             errors.append((dirname, str(e)))

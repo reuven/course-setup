@@ -339,7 +339,14 @@ def test_main_calls_retire_course(tmp_path: Path) -> None:
         with patch("sys.argv", ["retire-course", str(tmp_path)]):
             main()
 
-    mock_retire.assert_called_once_with(str(tmp_path), keep_public=False)
+    mock_retire.assert_called_once_with(str(tmp_path), keep_public=False, dry_run=False)
+
+
+def test_main_passes_dry_run(tmp_path: Path) -> None:
+    with patch("setup_course_github.retire_course.retire_course") as mock_retire:
+        with patch("sys.argv", ["retire-course", "--dry-run", str(tmp_path)]):
+            main()
+    mock_retire.assert_called_once_with(str(tmp_path), keep_public=False, dry_run=True)
 
 
 def test_main_requires_dirname() -> None:
@@ -358,9 +365,9 @@ def test_main_multiple_dirs(tmp_path: Path) -> None:
         with patch("sys.argv", ["retire-course", dir1, dir2, dir3]):
             main()
     assert mock_retire.call_count == 3
-    mock_retire.assert_any_call(dir1, keep_public=False)
-    mock_retire.assert_any_call(dir2, keep_public=False)
-    mock_retire.assert_any_call(dir3, keep_public=False)
+    mock_retire.assert_any_call(dir1, keep_public=False, dry_run=False)
+    mock_retire.assert_any_call(dir2, keep_public=False, dry_run=False)
+    mock_retire.assert_any_call(dir3, keep_public=False, dry_run=False)
 
 
 def test_main_continues_on_failure(tmp_path: Path) -> None:
@@ -703,6 +710,29 @@ def test_retirement_summary_with_notebooks(tmp_path: Path) -> None:
     assert "pandas" in summary
 
 
+def test_retirement_summary_strips_version_specifiers(tmp_path: Path) -> None:
+    """Version specifiers are stripped so only bare package names are shown.
+
+    Pins the ``re.split(r"[><=!~;]", d)`` name extraction: a substring check
+    like ``"pandas" in summary`` cannot catch a broken split (``pandas>=2.0``
+    still contains ``pandas``), so we assert the specifier itself is absent.
+    """
+    course_dir = tmp_path / "versioned"
+    course_dir.mkdir()
+    toml = (
+        '[project]\nname = "versioned"\n'
+        'dependencies = ["pandas>=2.0", "numpy<2", "requests~=2.31"]\n'
+    )
+    (course_dir / "pyproject.toml").write_text(toml)
+
+    dest = tmp_path / "archive" / "2026"
+    summary = _build_retirement_summary(str(course_dir), "user/versioned", dest)
+
+    assert "  Dependencies: pandas, numpy, requests" in summary
+    assert ">=" not in summary
+    assert "pandas>=2.0" not in summary
+
+
 def test_retirement_summary_no_notebooks(tmp_path: Path) -> None:
     """Directory with no notebooks shows 0 in summary."""
     course_dir = tmp_path / "empty-course"
@@ -783,19 +813,6 @@ def test_retirement_summary_unreadable_py_file(tmp_path: Path) -> None:
     summary = _build_retirement_summary(str(course_dir), "user/bad-py", dest)
 
     assert "Notebooks: 0" in summary
-
-
-def test_marimo_notebook_requires_both_markers(tmp_path: Path) -> None:
-    """_is_marimo_notebook requires BOTH markers — not just one."""
-    from setup_course_github.retire_course import _is_marimo_notebook
-
-    import_only = tmp_path / "import_only.py"
-    import_only.write_text("import marimo\n\nprint('hello')\n")
-    assert not _is_marimo_notebook(import_only)
-
-    app_only = tmp_path / "app_only.py"
-    app_only.write_text("# no import\napp = marimo.App()\n")
-    assert not _is_marimo_notebook(app_only)
 
 
 def test_retirement_summary_corrupt_pyproject(tmp_path: Path) -> None:
@@ -947,7 +964,7 @@ def test_main_keep_public_flag(tmp_path: Path) -> None:
         with patch("sys.argv", ["retire-course", "--keep-public", str(tmp_path)]):
             main()
 
-    mock_retire.assert_called_once_with(str(tmp_path), keep_public=True)
+    mock_retire.assert_called_once_with(str(tmp_path), keep_public=True, dry_run=False)
 
 
 def test_main_no_keep_public_flag(tmp_path: Path) -> None:
@@ -956,7 +973,7 @@ def test_main_no_keep_public_flag(tmp_path: Path) -> None:
         with patch("sys.argv", ["retire-course", str(tmp_path)]):
             main()
 
-    mock_retire.assert_called_once_with(str(tmp_path), keep_public=False)
+    mock_retire.assert_called_once_with(str(tmp_path), keep_public=False, dry_run=False)
 
 
 # ---------------------------------------------------------------------------
@@ -1082,6 +1099,91 @@ def test_retire_main_inside_course_prints_hint(
     assert "cd .." in captured.out
     assert "Traceback" not in captured.out
     assert "Traceback" not in captured.err
+
+
+def test_retire_course_dry_run_does_not_move(tmp_path: Path) -> None:
+    course = tmp_path / "mycourse"
+    course.mkdir()
+    with patch(
+        "setup_course_github.retire_course.get_remote_url",
+        return_value="git@github.com:someuser/myrepo.git",
+    ):
+        with patch(
+            "setup_course_github.retire_course.load_config", return_value=FAKE_CONFIG
+        ):
+            with patch("shutil.move") as mock_move:
+                retire_course(str(course), dry_run=True)
+    mock_move.assert_not_called()
+    assert course.exists()
+
+
+def test_retire_course_dry_run_skips_github() -> None:
+    with patch(
+        "setup_course_github.retire_course.get_remote_url",
+        return_value="git@github.com:someuser/myrepo.git",
+    ):
+        with patch("setup_course_github.retire_course.get_github") as mock_gh:
+            with patch(
+                "setup_course_github.retire_course.load_config",
+                return_value=FAKE_CONFIG,
+            ):
+                with patch("shutil.move"):
+                    retire_course("/some/course/dir", dry_run=True)
+    mock_gh.assert_not_called()
+
+
+def test_retire_course_dry_run_skips_confirm_create_dir() -> None:
+    with patch(
+        "setup_course_github.retire_course.get_remote_url",
+        return_value="git@github.com:someuser/myrepo.git",
+    ):
+        with patch(
+            "setup_course_github.retire_course.load_config", return_value=FAKE_CONFIG
+        ):
+            with patch(
+                "setup_course_github.retire_course._confirm_create_dir"
+            ) as mock_confirm:
+                with patch("shutil.move"):
+                    retire_course("/some/course/dir", dry_run=True)
+    mock_confirm.assert_not_called()
+
+
+def test_retire_course_dry_run_prints_banner_and_summary(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    course = tmp_path / "mycourse"
+    course.mkdir()
+    with patch(
+        "setup_course_github.retire_course.get_remote_url",
+        return_value="git@github.com:someuser/myrepo.git",
+    ):
+        with patch(
+            "setup_course_github.retire_course.load_config", return_value=FAKE_CONFIG
+        ):
+            retire_course(str(course), dry_run=True)
+    out = capsys.readouterr().out
+    assert "[DRY RUN]" in out
+    assert "Would retire" in out
+    assert "Retirement Summary" in out
+    # dry run describes intended action: repo would be made private
+    assert "(now private)" in out
+
+
+def test_retire_course_dry_run_keep_public_shows_still_public(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    course = tmp_path / "mycourse"
+    course.mkdir()
+    with patch(
+        "setup_course_github.retire_course.get_remote_url",
+        return_value="git@github.com:someuser/myrepo.git",
+    ):
+        with patch(
+            "setup_course_github.retire_course.load_config", return_value=FAKE_CONFIG
+        ):
+            retire_course(str(course), keep_public=True, dry_run=True)
+    out = capsys.readouterr().out
+    assert "(still public)" in out
 
 
 def test_retire_sibling_dir_does_not_trigger_guard(
