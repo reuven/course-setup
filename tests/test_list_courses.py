@@ -60,6 +60,21 @@ def test_course_summary_line_counts_and_dates(tmp_path: Path) -> None:
     assert line == "python-intro — 2 notebooks (2026-03-01 → 2026-03-08)"
 
 
+def test_course_summary_line_sums_ipynb_and_marimo(tmp_path: Path) -> None:
+    """Count is ipynb + marimo, not a difference.
+
+    Pins ``len(ipynb_files) + len(marimo_files)`` against a mutation to
+    ``-``: a course with one of each must report 2, which ``1 - 1 == 0``
+    would fail. A single-kind course cannot distinguish the operators.
+    """
+    course = tmp_path / "mixed"
+    course.mkdir()
+    (course / "lesson.ipynb").write_text("{}")
+    (course / "nb.py").write_text(MARIMO_SOURCE)
+    line = course_summary_line(course)
+    assert "— 2 notebooks" in line
+
+
 def test_resolve_scan_dirs_cli_overrides_config() -> None:
     config = CourseConfig(
         github_token="t",
