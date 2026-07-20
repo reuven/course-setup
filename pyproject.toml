@@ -31,6 +31,7 @@
     setup-course-config = "setup_course_github.init_config:main"
     unretire-course = "setup_course_github.unretire_course:main"
     archive-course = "setup_course_github.archive_course:main"
+    list-courses = "setup_course_github.list_courses:main"
 
 
 [build-system]

@@ -1,4 +1,7 @@
 from pathlib import Path
+from unittest.mock import patch
+
+import pytest
 
 from setup_course_github.config import CourseConfig
 from setup_course_github.list_courses import (
@@ -6,6 +9,7 @@ from setup_course_github.list_courses import (
     find_active_courses,
     find_archived_courses,
     is_course,
+    main,
     resolve_scan_dirs,
 )
 
@@ -118,3 +122,65 @@ def test_find_archived_courses_skips_non_dir_entries(tmp_path: Path) -> None:
     (tmp_path / "README.txt").write_text("not a year directory")
     result = find_archived_courses(tmp_path)
     assert list(result.keys()) == ["2026"]
+
+
+def _config_for(archive: Path, course_dirs: list[str]) -> CourseConfig:
+    return CourseConfig(
+        github_token="t",
+        archive_path=archive,
+        default_notebook_type="jupyter",
+        course_dirs=course_dirs,
+    )
+
+
+def test_main_lists_active_and_archived(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    active_root = tmp_path / "current"
+    active_root.mkdir()
+    _make_course(active_root, "live-course")
+    archive = tmp_path / "archive"
+    (archive / "2026" / "gone-course").mkdir(parents=True)
+
+    config = _config_for(archive, [str(active_root)])
+    with patch("setup_course_github.list_courses.load_config", return_value=config):
+        with patch("sys.argv", ["list-courses"]):
+            main()
+    out = capsys.readouterr().out
+    assert "Active courses:" in out
+    assert "live-course" in out
+    assert "Archived courses:" in out
+    assert "2026" in out
+    assert "gone-course" in out
+
+
+def test_main_no_active_courses_message(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    archive = tmp_path / "archive"
+    archive.mkdir()
+    config = _config_for(archive, [str(empty)])
+    with patch("setup_course_github.list_courses.load_config", return_value=config):
+        with patch("sys.argv", ["list-courses"]):
+            main()
+    out = capsys.readouterr().out
+    assert "No active courses found" in out
+    assert "No archived courses found" in out
+
+
+def test_main_cli_dirs_override(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    cli_root = tmp_path / "cli"
+    cli_root.mkdir()
+    _make_course(cli_root, "cli-course")
+    archive = tmp_path / "archive"
+    archive.mkdir()
+    config = _config_for(archive, ["/unused/config/path"])
+    with patch("setup_course_github.list_courses.load_config", return_value=config):
+        with patch("sys.argv", ["list-courses", str(cli_root)]):
+            main()
+    out = capsys.readouterr().out
+    assert "cli-course" in out

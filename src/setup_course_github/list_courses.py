@@ -1,6 +1,8 @@
+import argparse
 from pathlib import Path
 
-from setup_course_github.config import CourseConfig
+from setup_course_github import __author__, __email__, __version__
+from setup_course_github.config import CourseConfig, load_config
 from setup_course_github.notebooks import date_range, find_notebooks
 
 
@@ -53,3 +55,50 @@ def find_archived_courses(archive_path: Path) -> dict[str, list[Path]]:
         if courses:
             result[year_dir.name] = courses
     return result
+
+
+def main(argv: list[str] | None = None) -> None:
+    pypi_url = "https://pypi.org/project/course-setup/"
+    author_line = f"{__author__} <{__email__}>"
+
+    parser = argparse.ArgumentParser(
+        description="List active and archived courses.",
+        epilog=f"Version {__version__} — {pypi_url}\n{author_line}",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"%(prog)s {__version__}\n{pypi_url}\n{author_line}",
+    )
+    parser.add_argument(
+        "dirs",
+        nargs="*",
+        help="Directories to scan (overrides course_dirs from config)",
+    )
+    args = parser.parse_args(argv)
+
+    config = load_config()
+    scan_dirs = resolve_scan_dirs(args.dirs, config)
+
+    active = find_active_courses(scan_dirs)
+    print("Active courses:")
+    if active:
+        for course in active:
+            print(f"  {course_summary_line(course)}")
+    else:
+        print("  No active courses found")
+
+    archived = find_archived_courses(config.archive_path)
+    print("\nArchived courses:")
+    if archived:
+        for year, courses in archived.items():
+            print(f"  {year}:")
+            for course in courses:
+                print(f"    {course_summary_line(course)}")
+    else:
+        print("  No archived courses found")
+
+
+if __name__ == "__main__":  # pragma: no cover
+    main()
