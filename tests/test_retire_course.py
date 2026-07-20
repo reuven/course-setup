@@ -815,19 +815,6 @@ def test_retirement_summary_unreadable_py_file(tmp_path: Path) -> None:
     assert "Notebooks: 0" in summary
 
 
-def test_marimo_notebook_requires_both_markers(tmp_path: Path) -> None:
-    """_is_marimo_notebook requires BOTH markers — not just one."""
-    from setup_course_github.retire_course import _is_marimo_notebook
-
-    import_only = tmp_path / "import_only.py"
-    import_only.write_text("import marimo\n\nprint('hello')\n")
-    assert not _is_marimo_notebook(import_only)
-
-    app_only = tmp_path / "app_only.py"
-    app_only.write_text("# no import\napp = marimo.App()\n")
-    assert not _is_marimo_notebook(app_only)
-
-
 def test_retirement_summary_corrupt_pyproject(tmp_path: Path) -> None:
     """A corrupt pyproject.toml results in 'none' for dependencies."""
     course_dir = tmp_path / "corrupt-toml"

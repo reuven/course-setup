@@ -27,6 +27,7 @@ class CourseConfig:
     custom_extras: dict[str, list[str]] = field(default_factory=dict)
     default_weekend: str | None = None
     additional_files: list[str] = field(default_factory=list)
+    course_dirs: list[str] = field(default_factory=list)
     default_private: bool = False
 
 
@@ -128,6 +129,12 @@ def load_config(path: Path = CONFIG_PATH) -> CourseConfig:
         raise ConfigError("additional_files must be a list of file/directory paths")
     additional_files: list[str] = [str(f) for f in raw_additional_files]
 
+    # Course directories: optional list of dirs scanned by `list-courses`
+    raw_course_dirs: object = paths_section.get("course_dirs", [])
+    if not isinstance(raw_course_dirs, list):
+        raise ConfigError("course_dirs must be a list of directory paths")
+    course_dirs: list[str] = [str(d) for d in raw_course_dirs]
+
     return CourseConfig(
         github_token=github_token,
         archive_path=archive_path,
@@ -139,4 +146,5 @@ def load_config(path: Path = CONFIG_PATH) -> CourseConfig:
         default_weekend=default_weekend,
         additional_files=additional_files,
         default_private=default_private,
+        course_dirs=course_dirs,
     )

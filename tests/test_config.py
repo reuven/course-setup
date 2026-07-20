@@ -478,6 +478,50 @@ def test_additional_files_invalid_type_raises(tmp_path: Path) -> None:
         load_config(config_file)
 
 
+# ---------------------------------------------------------------------------
+# course_dirs tests
+# ---------------------------------------------------------------------------
+
+COURSE_DIRS_TOML = """
+[github]
+token = "ghp_testtoken"
+
+[paths]
+archive = "/tmp/archive"
+course_dirs = ["~/Courses/Current", "/other/courses"]
+"""
+
+COURSE_DIRS_NOT_LIST_TOML = """
+[github]
+token = "ghp_testtoken"
+
+[paths]
+archive = "/tmp/archive"
+course_dirs = "not-a-list"
+"""
+
+
+def test_load_config_course_dirs_list(tmp_path: Path) -> None:
+    config_file = tmp_path / "config.toml"
+    config_file.write_text(COURSE_DIRS_TOML)
+    config = load_config(config_file)
+    assert config.course_dirs == ["~/Courses/Current", "/other/courses"]
+
+
+def test_load_config_course_dirs_absent_defaults_empty(tmp_path: Path) -> None:
+    config_file = tmp_path / "config.toml"
+    config_file.write_text(MINIMAL_TOML)
+    config = load_config(config_file)
+    assert config.course_dirs == []
+
+
+def test_load_config_course_dirs_not_list_raises(tmp_path: Path) -> None:
+    config_file = tmp_path / "config.toml"
+    config_file.write_text(COURSE_DIRS_NOT_LIST_TOML)
+    with pytest.raises(ConfigError):
+        load_config(config_file)
+
+
 def test_custom_extras_empty_list(tmp_path: Path) -> None:
     """Config with finance = [] under [extras] loads with empty list."""
     toml_content = """
