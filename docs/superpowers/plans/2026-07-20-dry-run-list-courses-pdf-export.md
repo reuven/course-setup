@@ -443,10 +443,20 @@ git commit -m "feat: add shared notebooks helper module"
 
 **Files:**
 - Modify: `src/setup_course_github/retire_course.py` (remove `_is_marimo_notebook`; use helpers in `_build_retirement_summary`)
-- Test: `tests/test_retire_course.py` (existing tests guard behavior — no new tests)
+- Modify: `tests/test_retire_course.py` (remove the one test that imports the deleted `_is_marimo_notebook`)
+- Modify: `tests/test_notebooks.py` (receive the migrated marimo-markers test)
 
 **Interfaces:**
-- Consumes: `find_notebooks`, `date_range` from Task 4.
+- Consumes: `find_notebooks`, `date_range`, `is_marimo_notebook` from Task 4.
+
+> **Correction (found during execution):** two errors in the original draft of
+> this task. (1) `import re` must NOT be removed — `re.split(r"[><=!~;]", d)` in the
+> dependency-stripping block still uses it. (2) `tests/test_retire_course.py`
+> contains a pre-existing test `test_marimo_notebook_requires_both_markers` that
+> imports the `_is_marimo_notebook` being deleted, and it asserts the
+> exactly-one-marker→False case that `test_notebooks.py` does not otherwise cover.
+> So this is not a "no test changes" refactor: migrate that test to
+> `test_notebooks.py`, retargeting it to `is_marimo_notebook`.
 
 - [ ] **Step 1: Confirm the existing retire tests are green before refactoring**
 
@@ -463,9 +473,27 @@ In `src/setup_course_github/retire_course.py`:
 from setup_course_github.notebooks import date_range, find_notebooks
 ```
 
-2. Remove the now-unused `import re` (line 5) **only if** no other `re.` usage remains after step 3. (The `date_pattern` in `_build_retirement_summary` is the only other user — it is removed in step 3, so `re` can go.)
+2. **Keep `import re`** — `re.split(r"[><=!~;]", d)` in the dependency-stripping
+   block still uses it. (The original draft wrongly claimed `date_pattern` was
+   its only user.)
 
-3. Delete the `_is_marimo_notebook` function (lines 80-86).
+3. Delete the `_is_marimo_notebook` function (the `re`-based `date_pattern` line
+   inside `_build_retirement_summary` also goes, replaced in step 4). Then migrate
+   its test: **remove** `test_marimo_notebook_requires_both_markers` from
+   `tests/test_retire_course.py`, and **add** it to `tests/test_notebooks.py`
+   importing `is_marimo_notebook` from `setup_course_github.notebooks`:
+
+```python
+def test_is_marimo_notebook_requires_both_markers(tmp_path: Path) -> None:
+    """is_marimo_notebook requires BOTH markers — not just one."""
+    import_only = tmp_path / "import_only.py"
+    import_only.write_text("import marimo\n\nprint('hello')\n")
+    assert not is_marimo_notebook(import_only)
+
+    app_only = tmp_path / "app_only.py"
+    app_only.write_text("# no import\napp = marimo.App()\n")
+    assert not is_marimo_notebook(app_only)
+```
 
 4. In `_build_retirement_summary`, replace the notebook-counting block (lines 99-101) and the date-range block (lines 112-123) so the function body reads:
 
@@ -495,18 +523,20 @@ Then update the summary line that used `date_range` (was line 147) to use the lo
         f"  Date range: {date_range_str}",
 ```
 
-- [ ] **Step 3: Run the full retire suite to verify behavior is preserved**
+- [ ] **Step 3: Run the retire + notebooks suites to verify behavior is preserved**
 
-Run: `uv run pytest tests/test_retire_course.py -v`
-Expected: PASS (identical results to Step 1 — no behavior change).
+Run: `uv run pytest tests/test_retire_course.py tests/test_notebooks.py -v`
+Expected: PASS. The retire suite has one fewer test than Step 1 (the marimo-markers
+test moved to `test_notebooks.py`, where it now appears) — every other retire test
+still passes unchanged, confirming the refactor preserved behavior.
 
 - [ ] **Step 4: Format, lint, type-check, commit**
 
 ```bash
-uv run ruff format src/setup_course_github/retire_course.py
-uv run ruff check src/setup_course_github/retire_course.py
+uv run ruff format src/setup_course_github/retire_course.py tests/test_retire_course.py tests/test_notebooks.py
+uv run ruff check src/setup_course_github/retire_course.py tests/test_retire_course.py tests/test_notebooks.py
 uv run mypy --strict src/setup_course_github/retire_course.py
-git add src/setup_course_github/retire_course.py
+git add src/setup_course_github/retire_course.py tests/test_retire_course.py tests/test_notebooks.py
 git commit -m "refactor: use shared notebooks helper in retire_course"
 ```
 
