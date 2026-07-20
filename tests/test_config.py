@@ -518,7 +518,7 @@ def test_load_config_course_dirs_absent_defaults_empty(tmp_path: Path) -> None:
 def test_load_config_course_dirs_not_list_raises(tmp_path: Path) -> None:
     config_file = tmp_path / "config.toml"
     config_file.write_text(COURSE_DIRS_NOT_LIST_TOML)
-    with pytest.raises(ConfigError):
+    with pytest.raises(ConfigError, match="course_dirs"):
         load_config(config_file)
 
 
