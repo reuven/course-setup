@@ -13,9 +13,9 @@ uv tool install course-setup
 ```
 
 This makes `setup-course`, `retire-course`, `unretire-course`,
-`archive-course`, and `setup-course-config` available on your PATH. All five
-commands support `--version` and `--help`, which display the version number,
-PyPI URL, author name (Reuven Lerner), and email. To upgrade:
+`archive-course`, `list-courses`, and `setup-course-config` available on your
+PATH. All six commands support `--version` and `--help`, which display the
+version number, PyPI URL, author name (Reuven Lerner), and email. To upgrade:
 
 ```bash
 uv tool upgrade course-setup
@@ -54,6 +54,7 @@ notebook_type = "jupyter"   # or "marimo"
 | `[paths] archive` | Yes | Directory where retired courses are archived. |
 | `[paths] readme_source` | No | Local path or URL to a custom README for new courses. Omit to use the bundled default. |
 | `[paths] additional_files` | No | List of file/directory paths to copy into every new course (e.g. data files, exercise notebooks). |
+| `[paths] course_dirs` | No | List of directories that `list-courses` scans for active courses (e.g. `["~/Courses/Current"]`). `~` is expanded. |
 | `[defaults] notebook_type` | No | `"jupyter"` (default) or `"marimo"`. |
 | `[defaults] verbose` | No | `true` or `false` (default). Sets the default verbosity for `setup-course`. |
 | `[defaults] private` | No | `true` or `false` (default). When `true`, `setup-course` creates private GitHub repos by default. |
@@ -142,6 +143,7 @@ retire-course ./Acme-python-intro-2026-03
 |-----------------|-------------|
 | `DIRNAME...` | One or more course directories to retire |
 | `--keep-public` | Archive without making the GitHub repo private |
+| `--dry-run` | Preview the retirement without making any changes |
 
 This will (for each directory):
 
@@ -150,6 +152,13 @@ This will (for each directory):
    (prompts for confirmation if the year directory doesn't exist)
 3. Print a retirement summary showing: notebook count, date range, dependencies,
    archive location, and GitHub URL
+
+With `--dry-run`, none of that happens: the GitHub repo is not touched, the
+archive directory is not created, and the course directory is not moved.
+Instead, `retire-course` prints a `[DRY RUN]` banner followed by the same
+retirement summary the real run would show, so no GitHub token or network
+access is required. `--dry-run` applies to every directory passed on the
+command line.
 
 You can retire multiple courses at once:
 
@@ -173,14 +182,60 @@ archive-course ./Acme-python-intro-2026-03
 |------|-------------|
 | `--output`, `-o` | Custom output zip path (defaults to `{dirname}.zip`) |
 | `--no-html` | Skip HTML export of Jupyter notebooks |
+| `--no-pdf` | Skip PDF export of Jupyter notebooks |
 
 This archives **all files** in the course directory (`.py`, `.csv`, `.toml`,
 notebooks, etc.), excluding `.git`, `.venv`, `__pycache__`, and
 `.ipynb_checkpoints` directories. For Jupyter notebooks, each `.ipynb` is also
-exported to HTML via `nbconvert` and the `.html` is included alongside the
-original; use `--no-html` to skip the HTML export. After creating the archive,
-a summary is printed listing the archive path, file count, size, notebooks,
-and all other included files.
+exported to HTML and to PDF, and both are included alongside the original;
+use `--no-html` / `--no-pdf` to skip either export. PDF export is **on by
+default**, via `nbconvert --to webpdf` (headless Chromium — no LaTeX
+installation required). The first time you export to PDF, you may need to
+run `uv run playwright install chromium` inside the course directory to
+download the Chromium binary. If the PDF engine isn't available, `archive-course`
+prints a warning and skips PDF for that notebook rather than failing — the
+rest of the archive is still produced. After creating the archive, a summary
+is printed listing the archive path, file count, size, notebooks (shown as
+`notebook.ipynb + notebook.html + notebook.pdf`), export counts, and all
+other included files.
+
+### `list-courses` — List active and archived courses
+
+```bash
+list-courses
+```
+
+A read-only command: nothing is modified, and no GitHub token or network
+access is needed. It lists:
+
+- **Active courses**: for each scan directory, its immediate subdirectories
+  that qualify as a *course* — a directory containing both a `.git`
+  subdirectory and at least one notebook (`.ipynb`, or a marimo `.py`).
+- **Archived courses**: courses found under `{archive}/{year}/{course}`,
+  grouped by year, using your configured `[paths] archive` directory.
+
+Each course is shown as:
+
+```
+name — N notebooks (first-date → last-date)
+```
+
+with dates parsed from notebook filenames (`n/a` if none are found). If there
+are no active or archived courses, it prints `No active courses found` /
+`No archived courses found` respectively.
+
+| Argument | Description |
+|----------|-------------|
+| `DIR...` | Optional directories to scan (overrides `course_dirs` from config) |
+
+Directories to scan are resolved in this order:
+
+1. Positional directories passed on the command line (`list-courses DIR ...`)
+2. Otherwise, `[paths] course_dirs` from your config file
+3. Otherwise, the current directory
+
+Like the other commands, `list-courses --version` prints the version number,
+PyPI URL, author name, and email.
 
 ### `unretire-course` — Restore a retired course
 
