@@ -1,3 +1,4 @@
+import subprocess
 import zipfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -308,6 +309,55 @@ def test_archive_html_export_jupyter_not_found(
     assert zip_path.exists()
     output = capsys.readouterr().out
     assert "jupyter nbconvert not found" in output
+
+
+def test_export_notebook_to_pdf_runs_webpdf(tmp_path: Path) -> None:
+    from setup_course_github.archive_course import _export_notebook_to_pdf
+
+    course = tmp_path / "course"
+    course.mkdir()
+    nb = course / "lesson.ipynb"
+    nb.write_text("{}")
+    with patch("subprocess.run") as mock_run:
+        result = _export_notebook_to_pdf(nb, course)
+    assert result is True
+    args = mock_run.call_args
+    assert args.kwargs["cwd"] == str(course)
+    cmd = args.args[0]
+    assert cmd == [
+        "uv",
+        "run",
+        "jupyter",
+        "nbconvert",
+        "--to",
+        "webpdf",
+        "lesson.ipynb",
+    ]
+
+
+def test_export_notebook_to_pdf_handles_called_process_error(tmp_path: Path) -> None:
+    from setup_course_github.archive_course import _export_notebook_to_pdf
+
+    course = tmp_path / "course"
+    course.mkdir()
+    nb = course / "lesson.ipynb"
+    nb.write_text("{}")
+    err = subprocess.CalledProcessError(1, "nbconvert", stderr=b"chromium missing")
+    with patch("subprocess.run", side_effect=err):
+        result = _export_notebook_to_pdf(nb, course)
+    assert result is False
+
+
+def test_export_notebook_to_pdf_handles_missing_binary(tmp_path: Path) -> None:
+    from setup_course_github.archive_course import _export_notebook_to_pdf
+
+    course = tmp_path / "course"
+    course.mkdir()
+    nb = course / "lesson.ipynb"
+    nb.write_text("{}")
+    with patch("subprocess.run", side_effect=FileNotFoundError()):
+        result = _export_notebook_to_pdf(nb, course)
+    assert result is False
 
 
 def test_archive_notebook_with_spaces_in_name(tmp_path: Path) -> None:

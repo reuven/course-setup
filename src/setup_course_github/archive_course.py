@@ -8,14 +8,17 @@ from pathlib import Path
 from setup_course_github import __author__, __email__, __version__
 
 
-def _export_notebook_to_html(nb_path: Path, course_path: Path) -> bool:
-    """Export a single notebook to HTML. Returns True on success."""
+def _export_notebook(nb_path: Path, course_path: Path, fmt: str, label: str) -> bool:
+    """Export a notebook to *fmt* via nbconvert. Returns True on success.
+
+    *label* is the human-readable format name used in warning messages.
+    """
     # Use the notebook's relative path from the course dir so nbconvert
     # can find it regardless of spaces in the name.
     relative = nb_path.relative_to(course_path)
     try:
         subprocess.run(
-            ["uv", "run", "jupyter", "nbconvert", "--to", "html", str(relative)],
+            ["uv", "run", "jupyter", "nbconvert", "--to", fmt, str(relative)],
             cwd=str(course_path),
             capture_output=True,
             check=True,
@@ -23,11 +26,23 @@ def _export_notebook_to_html(nb_path: Path, course_path: Path) -> bool:
         return True
     except subprocess.CalledProcessError as exc:
         stderr = exc.stderr.decode() if exc.stderr else ""
-        print(f"  Warning: failed to export {nb_path.name}: {stderr.strip()}")
+        print(
+            f"  Warning: failed to export {nb_path.name} to {label}: {stderr.strip()}"
+        )
         return False
     except FileNotFoundError:
-        print("  Warning: jupyter nbconvert not found, skipping HTML export")
+        print(f"  Warning: jupyter nbconvert not found, skipping {label} export")
         return False
+
+
+def _export_notebook_to_html(nb_path: Path, course_path: Path) -> bool:
+    """Export a single notebook to HTML. Returns True on success."""
+    return _export_notebook(nb_path, course_path, "html", "HTML")
+
+
+def _export_notebook_to_pdf(nb_path: Path, course_path: Path) -> bool:
+    """Export a single notebook to PDF via webpdf. Returns True on success."""
+    return _export_notebook(nb_path, course_path, "webpdf", "PDF")
 
 
 def archive_course(
