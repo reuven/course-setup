@@ -12,6 +12,7 @@ from pathlib import Path
 
 from setup_course_github import __author__, __email__, __version__, get_github
 from setup_course_github.config import load_config
+from setup_course_github.notebooks import date_range, find_notebooks
 
 
 class InsideCourseDirectoryError(RuntimeError):
@@ -77,15 +78,6 @@ def _confirm_create_dir(dest: Path, confirm: Callable[[str], str] = input) -> No
             raise RuntimeError(f"Aborted: archive directory {dest} not created")
 
 
-def _is_marimo_notebook(path: Path) -> bool:
-    """Return True if a .py file looks like a marimo notebook."""
-    try:
-        text = path.read_text(encoding="utf-8")
-    except (OSError, UnicodeDecodeError):
-        return False
-    return "import marimo" in text and "marimo.App()" in text
-
-
 def _build_retirement_summary(
     dirname: str, repo_name: str, dest: Path, *, kept_public: bool = False
 ) -> str:
@@ -96,8 +88,7 @@ def _build_retirement_summary(
     dirpath = Path(dirname)
 
     # --- count notebooks ---------------------------------------------------
-    ipynb_files = list(dirpath.glob("*.ipynb"))
-    marimo_files = [p for p in dirpath.glob("*.py") if _is_marimo_notebook(p)]
+    ipynb_files, marimo_files = find_notebooks(dirpath)
     nb_count = len(ipynb_files) + len(marimo_files)
 
     if ipynb_files and marimo_files:
@@ -110,17 +101,7 @@ def _build_retirement_summary(
         nb_label = "0"
 
     # --- date range from filenames -----------------------------------------
-    date_pattern = re.compile(r"(\d{4}-\d{2}-\d{2})\.\w+$")
-    dates: list[str] = []
-    for p in ipynb_files + marimo_files:
-        m = date_pattern.search(p.name)
-        if m:
-            dates.append(m.group(1))
-    dates.sort()
-    if dates:
-        date_range = f"{dates[0]} \u2192 {dates[-1]}"
-    else:
-        date_range = "n/a"
+    date_range_str = date_range(ipynb_files + marimo_files)
 
     # --- dependencies from pyproject.toml ----------------------------------
     pyproject_path = dirpath / "pyproject.toml"
@@ -144,7 +125,7 @@ def _build_retirement_summary(
         "\u2500\u2500 Retirement Summary \u2500\u2500",
         f"  Course: {dirpath.name}",
         f"  Notebooks: {nb_label}",
-        f"  Date range: {date_range}",
+        f"  Date range: {date_range_str}",
         f"  Dependencies: {deps_str}",
         f"  Archived to: {dest / dirpath.name}",
         f"  GitHub repo: {repo_url} (still public)"

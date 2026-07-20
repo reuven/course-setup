@@ -26,6 +26,17 @@ def test_is_marimo_notebook_false_on_unreadable(tmp_path: Path) -> None:
     assert is_marimo_notebook(missing) is False
 
 
+def test_is_marimo_notebook_requires_both_markers(tmp_path: Path) -> None:
+    """is_marimo_notebook requires BOTH markers — not just one."""
+    import_only = tmp_path / "import_only.py"
+    import_only.write_text("import marimo\n\nprint('hello')\n")
+    assert not is_marimo_notebook(import_only)
+
+    app_only = tmp_path / "app_only.py"
+    app_only.write_text("# no import\napp = marimo.App()\n")
+    assert not is_marimo_notebook(app_only)
+
+
 def test_find_notebooks_separates_ipynb_and_marimo(tmp_path: Path) -> None:
     (tmp_path / "a.ipynb").write_text("{}")
     (tmp_path / "b.ipynb").write_text("{}")
