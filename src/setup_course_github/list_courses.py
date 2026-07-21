@@ -90,8 +90,9 @@ def archive_summary_line(archived: dict[str, list[Path]], patterns: list[str]) -
         return f"Archived: none{match_clause}"
     years = sorted(archived.keys())
     span = years[0] if len(years) == 1 else f"{years[0]}–{years[-1]}"
+    noun = "course" if total == 1 else "courses"
     return (
-        f"Archived: {total} courses{match_clause} across {span}"
+        f"Archived: {total} {noun}{match_clause} across {span}"
         " — use --archived to list them."
     )
 
