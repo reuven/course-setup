@@ -970,9 +970,11 @@ Archived courses: 412
 
 Empty-state messages: `No active courses found` (no active courses at all),
 `No active courses match: <names>` (name filter excluded everything active),
-`No archived courses found` (default view, nothing archived at all), and
-`No archived courses match your filters` (expanded archive view, name/year
-filters excluded everything).
+`No archived courses found` (expanded archive view via `--archived` with no
+name/year filters, nothing archived at all), and `No archived courses match
+your filters` (expanded archive view, name/year filters excluded everything).
+In the *default* view with nothing archived, the summary line reads
+`Archived: none` instead (see above).
 
 #### Examples
 
