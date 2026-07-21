@@ -5,7 +5,9 @@ import pytest
 
 from setup_course_github.config import CourseConfig
 from setup_course_github.list_courses import (
+    _expand_year_tokens,
     _matches_names,
+    _year_arg,
     archive_summary_line,
     course_summary_line,
     filter_active,
@@ -289,6 +291,49 @@ def test_filter_archived_by_name_drops_empty_years(tmp_path: Path) -> None:
     result = filter_archived(archived, [], ["cisco"])
     assert list(result.keys()) == ["2024"]
     assert [p.name for p in result["2024"]] == ["Cisco-x"]
+
+
+def test_year_arg_accepts_single_and_range() -> None:
+    assert _year_arg("2024") == "2024"
+    assert _year_arg("2020-2022") == "2020-2022"
+
+
+def test_year_arg_rejects_bad_tokens() -> None:
+    import argparse
+
+    for bad in ["24", "2020-", "abcd", "2020-20222", "2020-2021-2022"]:
+        with pytest.raises(argparse.ArgumentTypeError):
+            _year_arg(bad)
+
+
+def test_expand_year_tokens_single() -> None:
+    years, notes = _expand_year_tokens(["2024"])
+    assert years == ["2024"]
+    assert notes == []
+
+
+def test_expand_year_tokens_range_inclusive() -> None:
+    years, notes = _expand_year_tokens(["2020-2022"])
+    assert years == ["2020", "2021", "2022"]
+    assert notes == []
+
+
+def test_expand_year_tokens_degenerate_range() -> None:
+    years, notes = _expand_year_tokens(["2024-2024"])
+    assert years == ["2024"]
+    assert notes == []
+
+
+def test_expand_year_tokens_reversed_swaps_with_note() -> None:
+    years, notes = _expand_year_tokens(["2022-2020"])
+    assert years == ["2020", "2021", "2022"]
+    assert notes == ["swapped reversed year range 2022-2020 → 2020-2022"]
+
+
+def test_expand_year_tokens_mixed_singles_and_ranges() -> None:
+    years, notes = _expand_year_tokens(["2019", "2021-2023"])
+    assert years == ["2019", "2021", "2022", "2023"]
+    assert notes == []
 
 
 def test_archive_summary_line_multi_year(tmp_path: Path) -> None:

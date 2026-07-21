@@ -1,5 +1,6 @@
 import argparse
 import re
+import sys
 from pathlib import Path
 
 from setup_course_github import __author__, __email__, __version__
@@ -10,6 +11,7 @@ JUNK_NAMES = frozenset(
     {"__pycache__", "build", "dist", "bin", "include", "lib", "node_modules"}
 )
 _YEAR_RE = re.compile(r"^\d{4}$")
+_YEAR_TOKEN_RE = re.compile(r"^\d{4}(-\d{4})?$")
 
 
 def _is_junk_name(name: str) -> bool:
@@ -139,10 +141,36 @@ def find_archived_courses(archive_path: Path) -> dict[str, list[Path]]:
 
 
 def _year_arg(value: str) -> str:
-    """argparse type: accept only a 4-digit year."""
-    if not _YEAR_RE.match(value):
-        raise argparse.ArgumentTypeError(f"invalid year '{value}' (expected 4 digits)")
+    """argparse type: accept a 4-digit year or an inclusive YYYY-YYYY range."""
+    if not _YEAR_TOKEN_RE.match(value):
+        raise argparse.ArgumentTypeError(
+            f"invalid year '{value}' (expected YYYY or YYYY-YYYY)"
+        )
     return value
+
+
+def _expand_year_tokens(tokens: list[str]) -> tuple[list[str], list[str]]:
+    """Flatten single-year and range tokens into individual 4-digit years.
+
+    Returns ``(years, notes)`` where *notes* holds a message for each reversed
+    range that was auto-swapped. Ranges are inclusive; a reversed range like
+    ``2022-2020`` is swapped to ``2020-2022``.
+    """
+    years: list[str] = []
+    notes: list[str] = []
+    for token in tokens:
+        if "-" in token:
+            start_s, end_s = token.split("-")
+            start, end = int(start_s), int(end_s)
+            if start > end:
+                notes.append(
+                    f"swapped reversed year range {start_s}-{end_s} → {end_s}-{start_s}"
+                )
+                start, end = end, start
+            years.extend(f"{year:04d}" for year in range(start, end + 1))
+        else:
+            years.append(token)
+    return years, notes
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -188,7 +216,7 @@ def main(argv: list[str] | None = None) -> None:
         dest="years",
         type=_year_arg,
         metavar="YYYY",
-        help="Restrict archived courses to a year (repeatable; hides active)",
+        help="Restrict archived courses to a year or YYYY-YYYY range (repeatable)",
     )
     parser.add_argument(
         "--count",
@@ -196,6 +224,10 @@ def main(argv: list[str] | None = None) -> None:
         help="Show counts instead of individual course lines",
     )
     args = parser.parse_args(argv)
+
+    years, year_notes = _expand_year_tokens(args.years)
+    for note in year_notes:
+        print(f"Note: {note}", file=sys.stderr)
 
     config = load_config()
     scan_dirs = resolve_scan_dirs(args.dir, config)
@@ -226,7 +258,7 @@ def main(argv: list[str] | None = None) -> None:
 
     if show_archived:
         archived = filter_archived(
-            find_archived_courses(config.archive_path), args.years, patterns
+            find_archived_courses(config.archive_path), years, patterns
         )
         if show_active:
             print()
