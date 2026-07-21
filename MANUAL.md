@@ -227,7 +227,7 @@ Fill in each section:
 | `[paths] archive` | Yes | Absolute path to the directory where retired courses are stored. |
 | `[paths] readme_source` | No | Path or URL to a custom README.md. When set, `setup-course` uses this instead of the bundled default. Can be a local file path or an `https://` URL. |
 | `[paths] additional_files` | No | List of file or directory paths to copy into every new course directory after template setup. Directories are copied recursively. This is additive -- the listed items are copied alongside the standard template files, not in place of them. |
-| `[paths] course_dirs` | No | List of directories that `list-courses` scans for active courses (e.g. `["~/Courses/Current"]`). `~` is expanded. Overridden by positional directory arguments on the `list-courses` command line. Defaults to the current directory if unset and no positional arguments are given. |
+| `[paths] course_dirs` | No | List of directories that `list-courses` scans for active courses (e.g. `["~/Courses/Current"]`). `~` is expanded. Overridden by `--dir` arguments on the `list-courses` command line. Defaults to the current directory if unset and no `--dir` arguments are given. |
 | `[defaults] notebook_type` | No | `"jupyter"` (default) or `"marimo"`. Controls which kind of notebook file `setup-course` creates. |
 | `[defaults] verbose` | No | `true` or `false` (default). When `true`, `setup-course` prints detailed output by default. Can be overridden with `-v` on the command line. |
 | `[defaults] private` | No | `true` or `false` (default). When `true`, `setup-course` creates private GitHub repos by default. Can be overridden with `--private` on the command line. |
@@ -854,22 +854,42 @@ want to see the per-notebook warning.
 
 ### `list-courses` -- List active and archived courses
 
+#### Breaking change (3.2.0)
+
+In earlier versions, the positional argument to `list-courses` was a
+scan-directory override (`list-courses ~/Other` scanned `~/Other` instead of
+`course_dirs`). **That positional argument is now a name filter instead.**
+The old scan-directory behavior moved to a new repeatable `--dir PATH` flag:
+
+```
+list-courses --dir ~/Other
+```
+
+If you have scripts or aliases that pass a directory as a bare positional
+argument to `list-courses`, update them to use `--dir`.
+
 #### Synopsis
 
 ```
-list-courses [DIR ...] [--version]
+list-courses [NAME ...] [--dir PATH]... [--active] [--archived]
+             [--year YYYY]... [--count] [--version]
 ```
 
 #### Arguments
 
 | Argument | Required | Description |
 |----------|----------|-------------|
-| `DIR...` | No | Directories to scan for active courses. Overrides `course_dirs` from the config file. |
+| `NAME...` | No | Filter courses by case-insensitive name **substring** match on the course directory name. Repeatable / space-separated; multiple names match as OR (a course matches if its name contains any of them). A name filter narrows whatever section(s) are shown -- it does not by itself expand the archive to its full listing (see "Behavior composition" below). |
 
 #### Options
 
 | Option | Required | Description |
 |--------|----------|-------------|
+| `--dir PATH` | No | Directory to scan for active courses (repeatable). Replaces `[paths] course_dirs` from the config file for this run -- this is the old positional-argument behavior, moved here. |
+| `--active` | No | Show only the active-courses section. |
+| `--archived` | No | Show only the archived-courses section, expanded and grouped by year. |
+| `--year YYYY` | No | Restrict archived courses to the given year (repeatable: `--year 2024 --year 2025`). Must be a 4-digit year, or `list-courses` exits with an error. Focuses on the archive: passing `--year` without `--active` suppresses the active section (as if `--archived` had been passed, scoped to those years). If `--active` is also given, the active section is shown and `--year` is ignored for it (active courses aren't year-organized). |
+| `--count` | No | Print counts instead of individual course lines, honoring all other filters (name, `--dir`, `--active`/`--archived`, `--year`). |
 | `--version` | No | Show the version number, PyPI URL, author, and email, then exit. |
 
 #### What it does
@@ -877,29 +897,86 @@ list-courses [DIR ...] [--version]
 `list-courses` is read-only -- it never modifies files, moves directories, or
 contacts GitHub.
 
-1. **Resolves which directories to scan** in this order: directories passed
-   as positional arguments; otherwise `[paths] course_dirs` from the config
-   file; otherwise the current directory.
+1. **Resolves which directories to scan for active courses** in this order:
+   `--dir PATH` values passed on the command line (repeatable); otherwise
+   `[paths] course_dirs` from the config file; otherwise the current
+   directory.
 2. **Finds active courses**: for each scan directory, its immediate
    subdirectories that qualify as a *course* -- a directory containing both a
    `.git` subdirectory and at least one notebook (`.ipynb`, or a marimo
    `.py`).
 3. **Finds archived courses**: directories found under
    `{archive}/{year}/{course}`, using the `[paths] archive` directory from
-   your config file, grouped by year.
-4. **Prints both lists**. Each course is shown as:
+   your config file. Only directories directly under the archive root whose
+   name is a 4-digit year (`^\d{4}$`) are treated as year groups; everything
+   else at the archive root is ignored. Within a year, a directory counts as
+   an archived course if its name is not hidden (doesn't start with `.`), is
+   not a known junk name (`__pycache__`, `build`, `dist`, `bin`, `include`,
+   `lib`, `node_modules`), and contains at least one notebook. Unlike active
+   courses, an archived course does **not** need a `.git` subdirectory
+   (archived repos may have had it stripped).
+4. **Applies the name filter and `--year`**, then decides what to print (see
+   "Behavior composition" below). Each course is shown as:
 
    ```
    name — N notebooks (first-date → last-date)
    ```
 
    with the date range parsed from notebook filenames (`n/a` if none match).
-   If there are no active courses, it prints `No active courses found`;
-   if there are no archived courses, it prints `No archived courses found`.
+
+#### Behavior composition
+
+By default (no flags), `list-courses` prints the **active** section in full,
+followed by a **one-line archive summary** instead of the full archive
+listing:
+
+```
+Archived: 412 courses across 2018–2026 — use --archived to list them.
+```
+
+If there are no archived courses, this line reads `Archived: none`. If a name
+filter is active, the line reflects it: `Archived: 3 courses matching
+"cisco" across 2019–2024 — use --archived to list them.` (or `Archived: none
+matching "cisco"`).
+
+The rules for which section(s) are shown, and whether the archive is shown in
+full ("expanded") or as the one-line summary:
+
+| Flags | Active shown? | Archive shown? | Archive form |
+|---|---|---|---|
+| *(none)* | Yes, full | Yes | Summary line |
+| `--active` | Yes, full | No | -- |
+| `--archived` | No | Yes | Expanded, grouped by year |
+| `--active --archived` | Yes, full | Yes | Expanded, grouped by year |
+| `--year YYYY` | No | Yes | Expanded, scoped to that year |
+| `--active --year YYYY` | Yes, full | No | -- (`--year` ignored) |
+| `NAME` (positional, alone) | Yes, filtered | Yes | Summary line, name-filtered |
+| `NAME --archived` / `NAME --year YYYY` | per above | Yes, filtered | Expanded, name-filtered |
+
+A name filter never *opens* the archive by itself -- it only narrows courses
+within whichever section is already being shown. This keeps a bare
+`list-courses cisco` from dumping hundreds of archived matches; you must add
+`--archived` or `--year` to see the matching archived courses in full.
+
+With `--count`, every row above prints counts instead of course lines:
+
+```
+Active courses: 3
+Archived courses: 412
+  2018: 4
+  2020: 44
+  ...
+```
+
+Empty-state messages: `No active courses found` (no active courses at all),
+`No active courses match: <names>` (name filter excluded everything active),
+`No archived courses found` (default view, nothing archived at all), and
+`No archived courses match your filters` (expanded archive view, name/year
+filters excluded everything).
 
 #### Examples
 
-List courses using the configured `course_dirs`:
+List courses using the configured `course_dirs` (default view):
 
 ```
 list-courses
@@ -910,22 +987,54 @@ Active courses:
   Acme-python-intro-2026-03 — 5 notebooks (2026-03-17 → 2026-03-21)
   Beta-pandas-2026-02 — 3 notebooks (2026-02-02 → 2026-02-16)
 
-Archived courses:
-  2025:
-    Gamma-sql-2025-11 — 4 notebooks (2025-11-03 → 2025-11-24)
+Archived: 412 courses across 2018–2026 — use --archived to list them.
 ```
 
-List one or more specific directories, overriding the config:
+Scan one or more specific directories, overriding the config:
 
 ```
-list-courses ~/Courses/Current ~/Courses/Consulting
+list-courses --dir ~/Courses/Current --dir ~/Courses/Consulting
 ```
+
+Filter by name, and list the matching archived courses too:
+
+```
+list-courses cisco --archived
+```
+
+List archived courses from specific years only:
+
+```
+list-courses --year 2024 --year 2025
+```
+
+Print counts instead of course lines:
+
+```
+list-courses --count
+```
+
+The table below gives the result of each documented invocation:
+
+| Command | Result |
+|---|---|
+| `list-courses` | active full + `Archived: N courses across 2018–2026 — use --archived …` |
+| `list-courses --archived` | archive only, expanded, grouped by year |
+| `list-courses --active` | active only |
+| `list-courses cisco` | active courses matching "cisco" + a name-filtered archive summary line |
+| `list-courses cisco --archived` | archive courses matching "cisco" (all years, expanded) |
+| `list-courses --year 2024` | archive for 2024 only (active section suppressed) |
+| `list-courses --year 2024 --year 2025` | archive for 2024 and 2025 only |
+| `list-courses cisco --year 2024` | archive courses matching "cisco" from 2024 only |
+| `list-courses --active --year 2024` | active only (`--year` ignored for active) |
+| `list-courses --count` | `Active courses: 3` + `Archived courses: 412` + per-year counts |
+| `list-courses cisco --count` | counts of active + archive courses matching "cisco" |
+| `list-courses --dir ~/Other` | scan `~/Other` for active courses instead of config `course_dirs` |
 
 #### Requirements
 
 - `[paths] course_dirs` is optional in the config file; without it (and
-  without positional directory arguments) `list-courses` scans only the
-  current directory.
+  without `--dir` arguments) `list-courses` scans only the current directory.
 - `[paths] archive` must be set for archived courses to be found (the same
   setting used by `retire-course` and `unretire-course`).
 
