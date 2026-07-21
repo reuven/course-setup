@@ -204,7 +204,7 @@ def test_main_lists_active_and_archived(
     assert "Active courses:" in out
     assert "live-course" in out
     # default view: archive is a one-line summary, not an expanded listing
-    assert "Archived: 1 courses across 2026" in out
+    assert "Archived: 1 course across 2026" in out
     assert "gone-course" not in out
 
 
@@ -309,10 +309,25 @@ def test_archive_summary_line_single_year(tmp_path: Path) -> None:
     assert "–" not in line  # no en-dash range for a single year
 
 
+def test_archive_summary_line_singular_course(tmp_path: Path) -> None:
+    """A single archived course reads 'course', not 'courses'."""
+    archived = {"2024": [tmp_path / "only"]}
+    line = archive_summary_line(archived, [])
+    assert line.startswith("Archived: 1 course across 2024")
+    assert "1 courses" not in line
+
+
+def test_archive_summary_line_plural_two_courses(tmp_path: Path) -> None:
+    """Two archived courses read 'courses' (pins the == 1 boundary)."""
+    archived = {"2024": [tmp_path / "a", tmp_path / "b"]}
+    line = archive_summary_line(archived, [])
+    assert line.startswith("Archived: 2 courses across 2024")
+
+
 def test_archive_summary_line_with_name_filter(tmp_path: Path) -> None:
     archived = {"2024": [tmp_path / "Cisco-a"]}
     line = archive_summary_line(archived, ["cisco"])
-    assert line.startswith('Archived: 1 courses matching "cisco" across 2024')
+    assert line.startswith('Archived: 1 course matching "cisco" across 2024')
 
 
 def test_archive_summary_line_none(tmp_path: Path) -> None:
@@ -377,7 +392,7 @@ def test_main_name_filter_active_and_archive_summary(
     assert "Cisco-live" in out
     assert "Apple-live" not in out
     # bare name search keeps the archive as a name-filtered summary line
-    assert 'Archived: 1 courses matching "cisco"' in out
+    assert 'Archived: 1 course matching "cisco"' in out
     assert "Cisco-old" not in out
 
 
