@@ -674,9 +674,10 @@ def test_main_shows_github_url_by_default(
         ):
             with patch("sys.argv", ["list-courses"]):
                 main()
-    out = capsys.readouterr().out
-    assert "  live-course — " in out
-    assert "    https://github.com/reuven/live-course" in out
+    lines = capsys.readouterr().out.splitlines()
+    # exact-line match pins the active-course indent (2) and URL indent (4)
+    assert "  live-course — 1 notebooks (n/a)" in lines
+    assert "    https://github.com/reuven/live-course" in lines
 
 
 def test_main_url_placeholder_when_no_remote(
@@ -732,9 +733,10 @@ def test_main_archived_url_indented_six_spaces(
         ):
             with patch("sys.argv", ["list-courses", "--archived"]):
                 main()
-    out = capsys.readouterr().out
-    assert "    gone-course — " in out
-    assert "      https://github.com/reuven/gone-course" in out
+    lines = capsys.readouterr().out.splitlines()
+    # exact-line match pins the archived-course indent (4) and URL indent (6)
+    assert "    gone-course — 1 notebooks (n/a)" in lines
+    assert "      https://github.com/reuven/gone-course" in lines
 
 
 def test_main_count_prints_no_urls(
