@@ -1,5 +1,7 @@
 import argparse
 import re
+import subprocess
+import sys
 from pathlib import Path
 
 from setup_course_github import __author__, __email__, __version__
@@ -10,6 +12,8 @@ JUNK_NAMES = frozenset(
     {"__pycache__", "build", "dist", "bin", "include", "lib", "node_modules"}
 )
 _YEAR_RE = re.compile(r"^\d{4}$")
+_YEAR_TOKEN_RE = re.compile(r"^\d{4}(-\d{4})?$")
+_GITHUB_RE = re.compile(r"github\.com[:/](?P<path>[^/]+/[^/]+?)(?:\.git)?/?$")
 
 
 def _is_junk_name(name: str) -> bool:
@@ -43,6 +47,32 @@ def course_summary_line(path: Path) -> str:
     count = len(ipynb_files) + len(marimo_files)
     span = date_range(ipynb_files + marimo_files)
     return f"{path.name} — {count} notebooks ({span})"
+
+
+def _github_url(remote: str) -> str | None:
+    """Normalize a GitHub SSH/HTTPS remote to https://github.com/<owner>/<repo>.
+
+    Returns None for an empty string or a non-GitHub remote.
+    """
+    match = _GITHUB_RE.search(remote)
+    if not match:
+        return None
+    return f"https://github.com/{match.group('path')}"
+
+
+def github_url(course_path: Path) -> str | None:
+    """Return the course repo's GitHub URL from its local origin remote, or None.
+
+    Reads ``git config --get remote.origin.url`` in *course_path*; no network.
+    """
+    result = subprocess.run(
+        ["git", "config", "--get", "remote.origin.url"],
+        cwd=str(course_path),
+        capture_output=True,
+    )
+    if result.returncode != 0:
+        return None
+    return _github_url(result.stdout.decode().strip())
 
 
 def _matches_names(name: str, patterns: list[str]) -> bool:
@@ -139,10 +169,44 @@ def find_archived_courses(archive_path: Path) -> dict[str, list[Path]]:
 
 
 def _year_arg(value: str) -> str:
-    """argparse type: accept only a 4-digit year."""
-    if not _YEAR_RE.match(value):
-        raise argparse.ArgumentTypeError(f"invalid year '{value}' (expected 4 digits)")
+    """argparse type: accept a 4-digit year or an inclusive YYYY-YYYY range."""
+    if not _YEAR_TOKEN_RE.match(value):
+        raise argparse.ArgumentTypeError(
+            f"invalid year '{value}' (expected YYYY or YYYY-YYYY)"
+        )
     return value
+
+
+def _expand_year_tokens(tokens: list[str]) -> tuple[list[str], list[str]]:
+    """Flatten single-year and range tokens into individual 4-digit years.
+
+    Returns ``(years, notes)`` where *notes* holds a message for each reversed
+    range that was auto-swapped. Ranges are inclusive; a reversed range like
+    ``2022-2020`` is swapped to ``2020-2022``.
+    """
+    years: list[str] = []
+    notes: list[str] = []
+    for token in tokens:
+        if "-" in token:
+            start_s, end_s = token.split("-")
+            start, end = int(start_s), int(end_s)
+            if start > end:
+                notes.append(
+                    f"swapped reversed year range {start_s}-{end_s} → {end_s}-{start_s}"
+                )
+                start, end = end, start
+            years.extend(f"{year:04d}" for year in range(start, end + 1))
+        else:
+            years.append(token)
+    return years, notes
+
+
+def _print_course(course: Path, indent: int, show_urls: bool) -> None:
+    """Print a course summary line and, when *show_urls*, its indented URL line."""
+    print(f"{' ' * indent}{course_summary_line(course)}")
+    if show_urls:
+        url = github_url(course)
+        print(f"{' ' * (indent + 2)}{url or '(no GitHub remote)'}")
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -188,14 +252,23 @@ def main(argv: list[str] | None = None) -> None:
         dest="years",
         type=_year_arg,
         metavar="YYYY",
-        help="Restrict archived courses to a year (repeatable; hides active)",
+        help="Restrict archived courses to a year or YYYY-YYYY range (repeatable)",
     )
     parser.add_argument(
         "--count",
         action="store_true",
         help="Show counts instead of individual course lines",
     )
+    parser.add_argument(
+        "--no-urls",
+        action="store_true",
+        help="Do not show each course's GitHub URL",
+    )
     args = parser.parse_args(argv)
+
+    years, year_notes = _expand_year_tokens(args.years)
+    for note in year_notes:
+        print(f"Note: {note}", file=sys.stderr)
 
     config = load_config()
     scan_dirs = resolve_scan_dirs(args.dir, config)
@@ -209,6 +282,7 @@ def main(argv: list[str] | None = None) -> None:
     show_active = not (only_archived or year_focus)
     show_archived = not only_active
     archive_expanded = args.archived or has_years
+    show_urls = not args.no_urls
 
     if show_active:
         active = filter_active(find_active_courses(scan_dirs), patterns)
@@ -218,7 +292,7 @@ def main(argv: list[str] | None = None) -> None:
             print("Active courses:")
             if active:
                 for course in active:
-                    print(f"  {course_summary_line(course)}")
+                    _print_course(course, 2, show_urls)
             elif has_names:
                 print(f"  No active courses match: {', '.join(patterns)}")
             else:
@@ -226,7 +300,7 @@ def main(argv: list[str] | None = None) -> None:
 
     if show_archived:
         archived = filter_archived(
-            find_archived_courses(config.archive_path), args.years, patterns
+            find_archived_courses(config.archive_path), years, patterns
         )
         if show_active:
             print()
@@ -241,7 +315,7 @@ def main(argv: list[str] | None = None) -> None:
                 for year in sorted(archived):
                     print(f"  {year}:")
                     for course in archived[year]:
-                        print(f"    {course_summary_line(course)}")
+                        _print_course(course, 4, show_urls)
             elif has_names or has_years:
                 print("  No archived courses match your filters")
             else:
