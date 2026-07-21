@@ -872,7 +872,7 @@ argument to `list-courses`, update them to use `--dir`.
 
 ```
 list-courses [NAME ...] [--dir PATH]... [--active] [--archived]
-             [--year YYYY]... [--count] [--version]
+             [--year YYYY[-YYYY]]... [--count] [--no-urls] [--version]
 ```
 
 #### Arguments
@@ -888,14 +888,17 @@ list-courses [NAME ...] [--dir PATH]... [--active] [--archived]
 | `--dir PATH` | No | Directory to scan for active courses (repeatable). Replaces `[paths] course_dirs` from the config file for this run -- this is the old positional-argument behavior, moved here. |
 | `--active` | No | Show only the active-courses section. |
 | `--archived` | No | Show only the archived-courses section, expanded and grouped by year. |
-| `--year YYYY` | No | Restrict archived courses to the given year (repeatable: `--year 2024 --year 2025`). Must be a 4-digit year, or `list-courses` exits with an error. Focuses on the archive: passing `--year` without `--active` suppresses the active section (as if `--archived` had been passed, scoped to those years). If `--active` is also given, the active section is shown and `--year` is ignored for it (active courses aren't year-organized). |
+| `--year YYYY[-YYYY]` | No | Restrict archived courses to a year or an inclusive year **range** (repeatable: `--year 2024 --year 2025`, or `--year 2020-2022`; singles and ranges mix freely across repeats, e.g. `--year 2019 --year 2021-2023`). Each token must be a 4-digit year, optionally followed by `-` and another 4-digit year, or `list-courses` exits with an error (`invalid year '...'`). A **reversed** range such as `--year 2022-2020` is accepted and automatically swapped to `2020-2022`; a notice (`Note: swapped reversed year range 2022-2020 → 2020-2022`) is printed to **stderr**, one per reversed token. Focuses on the archive: passing `--year` without `--active` suppresses the active section (as if `--archived` had been passed, scoped to those years). If `--active` is also given, the active section is shown and `--year` is ignored for it (active courses aren't year-organized). |
 | `--count` | No | Print counts instead of individual course lines, honoring all other filters (name, `--dir`, `--active`/`--archived`, `--year`). |
+| `--no-urls` | No | Hide the per-course GitHub URL line shown by default under each listed course (see "Per-course GitHub URLs" below). |
 | `--version` | No | Show the version number, PyPI URL, author, and email, then exit. |
 
 #### What it does
 
 `list-courses` is read-only -- it never modifies files, moves directories, or
-contacts GitHub.
+contacts GitHub over the network. It does read each listed course's local
+`git` configuration to resolve its GitHub URL (see "Per-course GitHub URLs"
+below), but that is a local `git config` read, not a network call.
 
 1. **Resolves which directories to scan for active courses** in this order:
    `--dir PATH` values passed on the command line (repeatable); otherwise
@@ -915,14 +918,61 @@ contacts GitHub.
    `lib`, `node_modules`), and contains at least one notebook. Unlike active
    courses, an archived course does **not** need a `.git` subdirectory
    (archived repos may have had it stripped).
-4. **Applies the name filter and `--year`**, then decides what to print (see
-   "Behavior composition" below). Each course is shown as:
+4. **Expands `--year` tokens.** Each `--year` value is either a single
+   4-digit year or an inclusive `YYYY-YYYY` range; ranges are flattened into
+   individual years before filtering. A reversed range is swapped (see the
+   `--year` option above) and a notice is printed to stderr.
+5. **Applies the name filter and the expanded years**, then decides what to
+   print (see "Behavior composition" below). Each course is shown as:
 
    ```
    name — N notebooks (first-date → last-date)
    ```
 
    with the date range parsed from notebook filenames (`n/a` if none match).
+
+#### Per-course GitHub URLs
+
+By default, an indented line beneath each **listed** course shows its GitHub
+URL:
+
+```
+Active courses:
+  python-intro — 3 notebooks (2026-03-01 → 2026-03-15)
+    https://github.com/reuven/python-intro
+```
+
+The URL line sits 2 spaces deeper than its course line: 4 spaces for an
+active course (which prints at 2 spaces), 6 spaces for an archived course
+under a `  <year>:` heading (which prints at 4 spaces).
+
+The URL is read from the course's local `git` `origin` remote --
+`git config --get remote.origin.url`, run with the course directory as the
+working directory. This is a local read; no network call is made, and
+`list-courses` never contacts GitHub. Both the SSH form
+(`git@github.com:owner/repo.git`) and the HTTPS form
+(`https://github.com/owner/repo.git`) are recognized and normalized to
+`https://github.com/owner/repo`.
+
+If a course has no `.git` directory, no `origin` remote, or a remote that
+isn't a GitHub URL (for example, an archived course whose `.git` was
+stripped), an indented placeholder is shown instead so the layout stays
+uniform:
+
+```
+  old-course — 4 notebooks (n/a)
+    (no GitHub remote)
+```
+
+URL lines only appear where courses are printed individually: the active
+section, and the archived section when expanded via `--archived` or
+`--year`. They never appear in the one-line archive summary (the default,
+un-expanded archive view) or under `--count`, since neither prints
+individual course lines.
+
+Pass **`--no-urls`** to suppress all URL and placeholder lines (matches the
+existing `--no-html` / `--no-pdf` opt-out convention on `archive-course`; no
+short alias).
 
 #### Behavior composition
 
@@ -987,7 +1037,9 @@ list-courses
 ```
 Active courses:
   Acme-python-intro-2026-03 — 5 notebooks (2026-03-17 → 2026-03-21)
+    https://github.com/acme/python-intro-2026-03
   Beta-pandas-2026-02 — 3 notebooks (2026-02-02 → 2026-02-16)
+    https://github.com/beta/pandas-2026-02
 
 Archived: 412 courses across 2018–2026 — use --archived to list them.
 ```
@@ -1004,16 +1056,42 @@ Filter by name, and list the matching archived courses too:
 list-courses cisco --archived
 ```
 
-List archived courses from specific years only:
+List archived courses from specific years only, mixing a single year with a
+range:
 
 ```
-list-courses --year 2024 --year 2025
+list-courses --year 2019 --year 2021-2023
 ```
+
+A reversed range is accepted and swapped, with a notice on stderr:
+
+```
+list-courses --year 2022-2020
+```
+
+```
+Note: swapped reversed year range 2022-2020 → 2020-2022
+Archived courses:
+  2020:
+    ...
+  2021:
+    ...
+  2022:
+    ...
+```
+
+(The `Note:` line goes to stderr, so it's absent from redirected stdout.)
 
 Print counts instead of course lines:
 
 ```
 list-courses --count
+```
+
+Hide the per-course GitHub URL lines:
+
+```
+list-courses --no-urls
 ```
 
 The table below gives the result of each documented invocation:
@@ -1027,11 +1105,15 @@ The table below gives the result of each documented invocation:
 | `list-courses cisco --archived` | archive courses matching "cisco" (all years, expanded) |
 | `list-courses --year 2024` | archive for 2024 only (active section suppressed) |
 | `list-courses --year 2024 --year 2025` | archive for 2024 and 2025 only |
+| `list-courses --year 2020-2022` | archive for 2020 through 2022 only (inclusive range) |
+| `list-courses --year 2019 --year 2021-2023` | archive for 2019, 2021, 2022, 2023 (singles and ranges mix) |
+| `list-courses --year 2022-2020` | archive for 2020–2022 (reversed range swapped); `Note: swapped reversed year range 2022-2020 → 2020-2022` printed to stderr |
 | `list-courses cisco --year 2024` | archive courses matching "cisco" from 2024 only |
 | `list-courses --active --year 2024` | active only (`--year` ignored for active) |
-| `list-courses --count` | `Active courses: 3` + `Archived courses: 412` + per-year counts |
+| `list-courses --count` | `Active courses: 3` + `Archived courses: 412` + per-year counts (no URL lines) |
 | `list-courses cisco --count` | counts of active + archive courses matching "cisco" |
 | `list-courses --dir ~/Other` | scan `~/Other` for active courses instead of config `course_dirs` |
+| `list-courses --no-urls` | active full + archive summary, without per-course GitHub URL lines |
 
 #### Requirements
 
