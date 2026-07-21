@@ -277,8 +277,9 @@ def test_github_url_no_remote_is_none(tmp_path: Path) -> None:
 
 - [ ] **Step 2: Add the URL + year `main` behavior tests**
 
-First, the three year-range `main` tests (deferred from Task 1 — they use
-`--no-urls`, added in this task):
+First, the two remaining year-range `main` tests (Task 1 already added
+`test_main_year_reversed_range_prints_note_to_stderr`; Step 3 below adds
+`--no-urls` to it). These two use `--no-urls`, added in this task:
 
 ```python
 def test_main_year_range(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
@@ -317,22 +318,6 @@ def test_main_year_mixed_single_and_range(
     assert "c-2022" in out
     assert "c-2020" not in out
     assert "c-2023" not in out
-
-
-def test_main_year_reversed_range_prints_note_to_stderr(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
-    archive = tmp_path / "archive"
-    _make_course(archive / "2020", "c-2020")
-    _make_course(archive / "2021", "c-2021")
-    config = _config_for(archive, [])
-    with patch("setup_course_github.list_courses.load_config", return_value=config):
-        with patch("sys.argv", ["list-courses", "--year", "2021-2020", "--no-urls"]):
-            main()
-    captured = capsys.readouterr()
-    assert "swapped reversed year range 2021-2020 → 2020-2021" in captured.err
-    assert "c-2020" in captured.out
-    assert "c-2021" in captured.out
 ```
 
 Then these URL tests:
@@ -453,6 +438,9 @@ tests so they keep testing only which courses appear:
 - `test_main_year_focus_suppresses_active`
 - `test_main_year_repeatable`
 - `test_main_active_year_shows_active_ignores_year`
+- `test_main_year_reversed_range_prints_note_to_stderr` (added in Task 1 without
+  `--no-urls`; add it now so it stays clean once URLs are default-on — its
+  assertions are unaffected, but this avoids the placeholder lines)
 
 Do NOT change tests that list no courses (`test_main_no_active_courses_message`,
 `test_main_name_filter_no_active_match_message`,
