@@ -520,3 +520,81 @@ def test_main_rejects_bad_year(tmp_path: Path) -> None:
         with patch("sys.argv", ["list-courses", "--year", "24"]):
             with pytest.raises(SystemExit):
                 main()
+
+
+# ---------------------------------------------------------------------------
+# Mutation-audit hardening
+# ---------------------------------------------------------------------------
+
+
+def test_is_archived_course_rejects_every_junk_name(tmp_path: Path) -> None:
+    """Every entry in JUNK_NAMES is filtered out, even with a notebook present.
+
+    Iterates a hardcoded list (not JUNK_NAMES itself), so a mutation that drops
+    a single name from the set is caught rather than being self-consistent.
+    """
+    for name in [
+        "__pycache__",
+        "build",
+        "dist",
+        "bin",
+        "include",
+        "lib",
+        "node_modules",
+    ]:
+        d = tmp_path / name
+        d.mkdir()
+        (d / "lesson.ipynb").write_text("{}")
+        assert is_archived_course(d) is False, name
+
+
+def test_find_active_courses_missing_dir_does_not_abort_later_dirs(
+    tmp_path: Path,
+) -> None:
+    """A missing scan dir is skipped, not treated as a stop signal.
+
+    Pins the `continue` (vs `break`) in the missing-dir guard: a later scan dir
+    must still be scanned.
+    """
+    missing = tmp_path / "does-not-exist"
+    real = tmp_path / "real"
+    real.mkdir()
+    _make_course(real, "live-course")
+    result = find_active_courses([missing, real])
+    assert [p.name for p in result] == ["live-course"]
+
+
+def test_find_archived_courses_non_year_before_year_does_not_abort(
+    tmp_path: Path,
+) -> None:
+    """A non-year entry sorting before a real year dir must not stop the scan.
+
+    Pins the `continue` (vs `break`) in the year-dir guard: `0000-junk` sorts
+    before `2024`, so a `break` there would drop the 2024 courses.
+    """
+    (tmp_path / "0000-junk").mkdir()
+    _make_course(tmp_path / "2024", "real-course")
+    result = find_archived_courses(tmp_path)
+    assert list(result.keys()) == ["2024"]
+
+
+def test_archive_summary_line_three_year_span(tmp_path: Path) -> None:
+    """The range uses the LAST year, not the second.
+
+    Pins `years[-1]` against a mutation to `years[+1]` (== years[1]), which a
+    two-year span cannot distinguish (years[-1] == years[1] there).
+    """
+    archived = {
+        "2018": [tmp_path / "a"],
+        "2020": [tmp_path / "b"],
+        "2026": [tmp_path / "c"],
+    }
+    line = archive_summary_line(archived, [])
+    assert "across 2018–2026 " in line
+
+
+def test_archive_summary_line_multiple_name_patterns(tmp_path: Path) -> None:
+    """Multiple name patterns are rendered comma-separated in the summary."""
+    archived = {"2024": [tmp_path / "a"]}
+    line = archive_summary_line(archived, ["cisco", "apple"])
+    assert 'matching "cisco", "apple"' in line
