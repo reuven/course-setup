@@ -54,7 +54,7 @@ notebook_type = "jupyter"   # or "marimo"
 | `[paths] archive` | Yes | Directory where retired courses are archived. |
 | `[paths] readme_source` | No | Local path or URL to a custom README for new courses. Omit to use the bundled default. |
 | `[paths] additional_files` | No | List of file/directory paths to copy into every new course (e.g. data files, exercise notebooks). |
-| `[paths] course_dirs` | No | List of directories that `list-courses` scans for active courses (e.g. `["~/Courses/Current"]`). `~` is expanded. |
+| `[paths] course_dirs` | No | List of directories that `list-courses` scans for active courses (e.g. `["~/Courses/Current"]`). `~` is expanded. Overridden by `--dir` on the `list-courses` command line. |
 | `[defaults] notebook_type` | No | `"jupyter"` (default) or `"marimo"`. |
 | `[defaults] verbose` | No | `true` or `false` (default). Sets the default verbosity for `setup-course`. |
 | `[defaults] private` | No | `true` or `false` (default). When `true`, `setup-course` creates private GitHub repos by default. |
@@ -206,36 +206,67 @@ list-courses
 ```
 
 A read-only command: nothing is modified, and no GitHub API calls are made (it
-reads your config file but does not use the network). It lists:
+reads your config file but does not use the network).
 
-- **Active courses**: for each scan directory, its immediate subdirectories
-  that qualify as a *course* — a directory containing both a `.git`
-  subdirectory and at least one notebook (`.ipynb`, or a marimo `.py`).
-- **Archived courses**: courses found under `{archive}/{year}/{course}`,
-  grouped by year, using your configured `[paths] archive` directory.
+> **Breaking change (3.2.0):** the positional argument used to be a
+> scan-directory override (`list-courses ~/Other`). It is now a **name
+> filter** instead. To scan a different directory, use the repeatable
+> `--dir PATH` flag: `list-courses --dir ~/Other`.
 
-Each course is shown as:
+By default, `list-courses` prints the full list of **active courses** — a
+directory qualifies as a course if it has a `.git` subdirectory and at least
+one notebook (`.ipynb`, or a marimo `.py`) — followed by a one-line summary of
+the **archived courses** found under your configured `[paths] archive`
+directory (an archived course is any non-hidden, non-junk directory under a
+4-digit-year folder that contains at least one notebook):
 
 ```
-name — N notebooks (first-date → last-date)
+Active courses:
+  Acme-python-intro-2026-03 — 5 notebooks (2026-03-17 → 2026-03-21)
+  Beta-pandas-2026-02 — 3 notebooks (2026-02-02 → 2026-02-16)
+
+Archived: 412 courses across 2018–2026 — use --archived to list them.
 ```
 
-with dates parsed from notebook filenames (`n/a` if none are found). If there
-are no active or archived courses, it prints `No active courses found` /
-`No archived courses found` respectively.
+Each course line is shown as `name — N notebooks (first-date → last-date)`,
+with dates parsed from notebook filenames (`n/a` if none are found).
 
-| Argument | Description |
+| Argument / Option | Description |
 |----------|-------------|
-| `DIR...` | Optional directories to scan (overrides `course_dirs` from config) |
+| `NAME...` | Filter courses by case-insensitive name substring. Multiple names match as OR. Narrows whatever is shown; does not by itself expand the archive. |
+| `--dir PATH` | Directory to scan for active courses (repeatable; replaces `course_dirs` from config for this run) |
+| `--active` | Show only the active-courses section |
+| `--archived` | Show only the archived-courses section, expanded and grouped by year |
+| `--year YYYY` | Restrict archived courses to a year (repeatable, 4-digit years only); implies `--archived` unless `--active` is also given, in which case `--year` is ignored |
+| `--count` | Print counts instead of course lines, honoring all other filters |
+| `--version` | Show the version number, PyPI URL, author name, and email |
 
-Directories to scan are resolved in this order:
+Directories to scan for active courses are resolved in this order:
 
-1. Positional directories passed on the command line (`list-courses DIR ...`)
+1. `--dir PATH` values passed on the command line (repeatable)
 2. Otherwise, `[paths] course_dirs` from your config file
 3. Otherwise, the current directory
 
-Like the other commands, `list-courses --version` prints the version number,
-PyPI URL, author name, and email.
+#### Examples
+
+| Command | Result |
+|---|---|
+| `list-courses` | active courses in full + `Archived: N courses across 2018–2026 — use --archived …` |
+| `list-courses --archived` | archive only, expanded and grouped by year |
+| `list-courses --active` | active courses only |
+| `list-courses cisco` | active courses matching "cisco" + a name-filtered archive summary line |
+| `list-courses cisco --archived` | archived courses matching "cisco" (all years, expanded) |
+| `list-courses --year 2024` | archive for 2024 only (active section suppressed) |
+| `list-courses --year 2024 --year 2025` | archive for 2024 and 2025 only |
+| `list-courses cisco --year 2024` | archived courses matching "cisco" from 2024 only |
+| `list-courses --active --year 2024` | active only (`--year` is ignored for active) |
+| `list-courses --count` | `Active courses: 3` + `Archived courses: 412` + per-year counts |
+| `list-courses cisco --count` | counts of active + archived courses matching "cisco" |
+| `list-courses --dir ~/Other` | scan `~/Other` for active courses instead of config `course_dirs` |
+
+If there are no matching active or archived courses, it prints an empty-state
+line (e.g. `No active courses found`, or `No active courses match: cisco` when
+a name filter excludes everything).
 
 ### `unretire-course` — Restore a retired course
 
