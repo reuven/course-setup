@@ -61,9 +61,12 @@ Active course = directory with a `.git` subdir **and** ≥1 notebook.
 
 ### `--year YYYY`
 
-Restrict the archive listing to a single year and expand it. Applies to the
-archive section only (active courses are not year-organized). Passing `--year`
-implies the archive is shown expanded even without `--archived`.
+Restrict the archive listing to a single year and expand it. `--year` is an
+**archive-focusing** flag: because active courses are not year-organized, passing
+`--year` (without `--active`) shows the archive section only and suppresses the
+active section — it behaves like `--archived` scoped to one year. If `--active`
+is given explicitly, the active section is shown and `--year` is ignored for it
+(active has no years).
 
 ### Name match (positional) — BREAKING CHANGE
 
@@ -98,12 +101,17 @@ Inputs from argparse: `names` (list[str], positional), `dir` (list[str],
 repeatable), `active` (bool), `archived` (bool), `year` (str|None), `count`
 (bool).
 
-- `only_active  = active and not archived`
-- `only_archived = archived and not active`
-- `show_active   = not only_archived`
-- `show_archived = not only_active`
 - `has_names = bool(names)`
-- `archive_expanded = archived or only_archived or (year is not None) or has_names`
+- `only_active   = active and not archived`
+- `only_archived = archived and not active`
+- `year_focus    = (year is not None) and not active and not archived`
+  (a bare `--year` focuses the archive when neither section flag is set)
+- `show_active   = not (only_archived or year_focus)`
+- `show_archived = not only_active`
+- `archive_expanded = archived or (year is not None) or has_names`
+
+`--year` therefore hides the active section unless `--active` is explicitly
+passed; `--active --year …` shows active only (year ignored for active).
 
 Active section (when `show_active`):
 - Filter active courses by name (if `has_names`).
@@ -130,8 +138,9 @@ is unchanged.
 | `list-courses --archived` | archive only, expanded, grouped by year |
 | `list-courses --active` | active only |
 | `list-courses cisco` | active + archive entries whose name contains "cisco" (archive expanded) |
-| `list-courses --year 2024` | active full + archive for 2024 (expanded) |
-| `list-courses --archived --year 2024` | archive for 2024 only |
+| `list-courses --year 2024` | archive for 2024 only (active section suppressed) |
+| `list-courses cisco --year 2024` | archive courses matching "cisco" from 2024 only |
+| `list-courses --active --year 2024` | active only (`--year` ignored for active) |
 | `list-courses --count` | `Active courses: 3` + `Archived courses: 412` + per-year counts |
 | `list-courses cisco --count` | counts of active + archive courses matching "cisco" |
 | `list-courses --dir ~/Other` | scan `~/Other` for active courses instead of config `course_dirs` |
