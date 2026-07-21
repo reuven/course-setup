@@ -203,9 +203,9 @@ def test_main_lists_active_and_archived(
     out = capsys.readouterr().out
     assert "Active courses:" in out
     assert "live-course" in out
-    assert "Archived courses:" in out
-    assert "2026" in out
-    assert "gone-course" in out
+    # default view: archive is a one-line summary, not an expanded listing
+    assert "Archived: 1 courses across 2026" in out
+    assert "gone-course" not in out
 
 
 def test_main_no_active_courses_message(
@@ -221,7 +221,7 @@ def test_main_no_active_courses_message(
             main()
     out = capsys.readouterr().out
     assert "No active courses found" in out
-    assert "No archived courses found" in out
+    assert "Archived: none" in out
 
 
 def test_main_cli_dirs_override(
@@ -234,7 +234,7 @@ def test_main_cli_dirs_override(
     archive.mkdir()
     config = _config_for(archive, ["/unused/config/path"])
     with patch("setup_course_github.list_courses.load_config", return_value=config):
-        with patch("sys.argv", ["list-courses", str(cli_root)]):
+        with patch("sys.argv", ["list-courses", "--dir", str(cli_root)]):
             main()
     out = capsys.readouterr().out
     assert "cli-course" in out
@@ -321,3 +321,202 @@ def test_archive_summary_line_none(tmp_path: Path) -> None:
 
 def test_archive_summary_line_none_with_filter(tmp_path: Path) -> None:
     assert archive_summary_line({}, ["cisco"]) == 'Archived: none matching "cisco"'
+
+
+def test_main_archived_flag_expands_listing(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    active_root = tmp_path / "current"
+    active_root.mkdir()
+    _make_course(active_root, "live-course")
+    archive = tmp_path / "archive"
+    _make_course(archive / "2026", "gone-course")
+    config = _config_for(archive, [str(active_root)])
+    with patch("setup_course_github.list_courses.load_config", return_value=config):
+        with patch("sys.argv", ["list-courses", "--archived"]):
+            main()
+    out = capsys.readouterr().out
+    assert "Archived courses:" in out
+    assert "gone-course" in out
+    # --archived suppresses the active section
+    assert "live-course" not in out
+
+
+def test_main_active_flag_only(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    active_root = tmp_path / "current"
+    active_root.mkdir()
+    _make_course(active_root, "live-course")
+    archive = tmp_path / "archive"
+    _make_course(archive / "2026", "gone-course")
+    config = _config_for(archive, [str(active_root)])
+    with patch("setup_course_github.list_courses.load_config", return_value=config):
+        with patch("sys.argv", ["list-courses", "--active"]):
+            main()
+    out = capsys.readouterr().out
+    assert "live-course" in out
+    assert "Archived" not in out
+
+
+def test_main_name_filter_active_and_archive_summary(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    active_root = tmp_path / "current"
+    active_root.mkdir()
+    _make_course(active_root, "Cisco-live")
+    _make_course(active_root, "Apple-live")
+    archive = tmp_path / "archive"
+    _make_course(archive / "2026", "Cisco-old")
+    _make_course(archive / "2026", "Apple-old")
+    config = _config_for(archive, [str(active_root)])
+    with patch("setup_course_github.list_courses.load_config", return_value=config):
+        with patch("sys.argv", ["list-courses", "cisco"]):
+            main()
+    out = capsys.readouterr().out
+    assert "Cisco-live" in out
+    assert "Apple-live" not in out
+    # bare name search keeps the archive as a name-filtered summary line
+    assert 'Archived: 1 courses matching "cisco"' in out
+    assert "Cisco-old" not in out
+
+
+def test_main_name_filter_with_archived_expands(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    archive = tmp_path / "archive"
+    _make_course(archive / "2025", "Cisco-a")
+    _make_course(archive / "2026", "Cisco-b")
+    _make_course(archive / "2026", "Apple-c")
+    config = _config_for(archive, [])
+    with patch("setup_course_github.list_courses.load_config", return_value=config):
+        with patch("sys.argv", ["list-courses", "cisco", "--archived"]):
+            main()
+    out = capsys.readouterr().out
+    assert "Cisco-a" in out
+    assert "Cisco-b" in out
+    assert "Apple-c" not in out
+
+
+def test_main_year_focus_suppresses_active(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    active_root = tmp_path / "current"
+    active_root.mkdir()
+    _make_course(active_root, "live-course")
+    archive = tmp_path / "archive"
+    _make_course(archive / "2024", "old-2024")
+    _make_course(archive / "2025", "old-2025")
+    config = _config_for(archive, [str(active_root)])
+    with patch("setup_course_github.list_courses.load_config", return_value=config):
+        with patch("sys.argv", ["list-courses", "--year", "2024"]):
+            main()
+    out = capsys.readouterr().out
+    assert "old-2024" in out
+    assert "old-2025" not in out
+    assert "live-course" not in out  # active suppressed by --year
+
+
+def test_main_year_repeatable(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    archive = tmp_path / "archive"
+    _make_course(archive / "2024", "c-2024")
+    _make_course(archive / "2025", "c-2025")
+    _make_course(archive / "2026", "c-2026")
+    config = _config_for(archive, [])
+    with patch("setup_course_github.list_courses.load_config", return_value=config):
+        with patch("sys.argv", ["list-courses", "--year", "2024", "--year", "2026"]):
+            main()
+    out = capsys.readouterr().out
+    assert "c-2024" in out
+    assert "c-2026" in out
+    assert "c-2025" not in out
+
+
+def test_main_active_year_shows_active_ignores_year(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    active_root = tmp_path / "current"
+    active_root.mkdir()
+    _make_course(active_root, "live-course")
+    archive = tmp_path / "archive"
+    _make_course(archive / "2024", "old-2024")
+    config = _config_for(archive, [str(active_root)])
+    with patch("setup_course_github.list_courses.load_config", return_value=config):
+        with patch("sys.argv", ["list-courses", "--active", "--year", "2024"]):
+            main()
+    out = capsys.readouterr().out
+    assert "live-course" in out
+    assert "old-2024" not in out
+
+
+def test_main_count(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    active_root = tmp_path / "current"
+    active_root.mkdir()
+    _make_course(active_root, "live-course")
+    archive = tmp_path / "archive"
+    _make_course(archive / "2024", "a")
+    _make_course(archive / "2024", "b")
+    _make_course(archive / "2025", "c")
+    config = _config_for(archive, [str(active_root)])
+    with patch("setup_course_github.list_courses.load_config", return_value=config):
+        with patch("sys.argv", ["list-courses", "--count"]):
+            main()
+    out = capsys.readouterr().out
+    assert "Active courses: 1" in out
+    assert "Archived courses: 3" in out
+    assert "2024: 2" in out
+    assert "2025: 1" in out
+
+
+def test_main_name_filter_no_active_match_message(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    active_root = tmp_path / "current"
+    active_root.mkdir()
+    _make_course(active_root, "Apple-live")
+    archive = tmp_path / "archive"
+    archive.mkdir()
+    config = _config_for(archive, [str(active_root)])
+    with patch("setup_course_github.list_courses.load_config", return_value=config):
+        with patch("sys.argv", ["list-courses", "cisco"]):
+            main()
+    out = capsys.readouterr().out
+    assert "No active courses match: cisco" in out
+
+
+def test_main_archived_expanded_no_match_message(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    archive = tmp_path / "archive"
+    _make_course(archive / "2026", "Apple-x")
+    config = _config_for(archive, [])
+    with patch("setup_course_github.list_courses.load_config", return_value=config):
+        with patch("sys.argv", ["list-courses", "cisco", "--archived"]):
+            main()
+    out = capsys.readouterr().out
+    assert "No archived courses match" in out
+
+
+def test_main_archived_flag_empty_archive_message(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    archive = tmp_path / "archive"
+    archive.mkdir()
+    config = _config_for(archive, [])
+    with patch("setup_course_github.list_courses.load_config", return_value=config):
+        with patch("sys.argv", ["list-courses", "--archived"]):
+            main()
+    out = capsys.readouterr().out
+    assert "No archived courses found" in out
+
+
+def test_main_rejects_bad_year(tmp_path: Path) -> None:
+    archive = tmp_path / "archive"
+    archive.mkdir()
+    config = _config_for(archive, [])
+    with patch("setup_course_github.list_courses.load_config", return_value=config):
+        with patch("sys.argv", ["list-courses", "--year", "24"]):
+            with pytest.raises(SystemExit):
+                main()

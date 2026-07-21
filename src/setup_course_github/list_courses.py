@@ -137,6 +137,13 @@ def find_archived_courses(archive_path: Path) -> dict[str, list[Path]]:
     return result
 
 
+def _year_arg(value: str) -> str:
+    """argparse type: accept only a 4-digit year."""
+    if not _YEAR_RE.match(value):
+        raise argparse.ArgumentTypeError(f"invalid year '{value}' (expected 4 digits)")
+    return value
+
+
 def main(argv: list[str] | None = None) -> None:
     pypi_url = "https://pypi.org/project/course-setup/"
     author_line = f"{__author__} <{__email__}>"
@@ -152,32 +159,94 @@ def main(argv: list[str] | None = None) -> None:
         version=f"%(prog)s {__version__}\n{pypi_url}\n{author_line}",
     )
     parser.add_argument(
-        "dirs",
+        "names",
         nargs="*",
-        help="Directories to scan (overrides course_dirs from config)",
+        help="Filter courses by case-insensitive name substring (any match)",
+    )
+    parser.add_argument(
+        "--dir",
+        action="append",
+        default=[],
+        metavar="PATH",
+        help="Directory to scan for active courses (repeatable; overrides config)",
+    )
+    parser.add_argument(
+        "--active",
+        action="store_true",
+        help="Show only active courses",
+    )
+    parser.add_argument(
+        "--archived",
+        action="store_true",
+        help="Show only archived courses (expanded, grouped by year)",
+    )
+    parser.add_argument(
+        "--year",
+        action="append",
+        default=[],
+        dest="years",
+        type=_year_arg,
+        metavar="YYYY",
+        help="Restrict archived courses to a year (repeatable; hides active)",
+    )
+    parser.add_argument(
+        "--count",
+        action="store_true",
+        help="Show counts instead of individual course lines",
     )
     args = parser.parse_args(argv)
 
     config = load_config()
-    scan_dirs = resolve_scan_dirs(args.dirs, config)
+    scan_dirs = resolve_scan_dirs(args.dir, config)
 
-    active = find_active_courses(scan_dirs)
-    print("Active courses:")
-    if active:
-        for course in active:
-            print(f"  {course_summary_line(course)}")
-    else:
-        print("  No active courses found")
+    patterns: list[str] = args.names
+    has_names = bool(patterns)
+    has_years = bool(args.years)
+    only_active = args.active and not args.archived
+    only_archived = args.archived and not args.active
+    year_focus = has_years and not args.active and not args.archived
+    show_active = not (only_archived or year_focus)
+    show_archived = not only_active
+    archive_expanded = args.archived or has_years
 
-    archived = find_archived_courses(config.archive_path)
-    print("\nArchived courses:")
-    if archived:
-        for year, courses in archived.items():
-            print(f"  {year}:")
-            for course in courses:
-                print(f"    {course_summary_line(course)}")
-    else:
-        print("  No archived courses found")
+    if show_active:
+        active = filter_active(find_active_courses(scan_dirs), patterns)
+        if args.count:
+            print(f"Active courses: {len(active)}")
+        else:
+            print("Active courses:")
+            if active:
+                for course in active:
+                    print(f"  {course_summary_line(course)}")
+            elif has_names:
+                print(f"  No active courses match: {', '.join(patterns)}")
+            else:
+                print("  No active courses found")
+
+    if show_archived:
+        archived = filter_archived(
+            find_archived_courses(config.archive_path), args.years, patterns
+        )
+        if show_active:
+            print()
+        if args.count:
+            total = sum(len(courses) for courses in archived.values())
+            print(f"Archived courses: {total}")
+            for year in sorted(archived):
+                print(f"  {year}: {len(archived[year])}")
+        elif archive_expanded:
+            print("Archived courses:")
+            if archived:
+                for year in sorted(archived):
+                    print(f"  {year}:")
+                    for course in archived[year]:
+                        print(f"    {course_summary_line(course)}")
+            elif has_names or has_years:
+                print("  No archived courses match your filters")
+            else:
+                print("  No archived courses found")
+        else:
+            print(archive_summary_line(archived, patterns))
 
 
 if __name__ == "__main__":  # pragma: no cover
