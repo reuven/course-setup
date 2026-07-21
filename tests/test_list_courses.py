@@ -6,7 +6,9 @@ import pytest
 from setup_course_github.config import CourseConfig
 from setup_course_github.list_courses import (
     _expand_year_tokens,
+    _github_url,
     _matches_names,
+    _print_course,
     _year_arg,
     archive_summary_line,
     course_summary_line,
@@ -14,6 +16,7 @@ from setup_course_github.list_courses import (
     filter_archived,
     find_active_courses,
     find_archived_courses,
+    github_url,
     is_archived_course,
     is_course,
     main,
@@ -80,6 +83,91 @@ def test_course_summary_line_sums_ipynb_and_marimo(tmp_path: Path) -> None:
     (course / "nb.py").write_text(MARIMO_SOURCE)
     line = course_summary_line(course)
     assert "— 2 notebooks" in line
+
+
+def test_github_url_normalizes_ssh() -> None:
+    assert (
+        _github_url("git@github.com:reuven/demo.git")
+        == "https://github.com/reuven/demo"
+    )
+
+
+def test_github_url_normalizes_https_with_and_without_git() -> None:
+    assert (
+        _github_url("https://github.com/reuven/demo.git")
+        == "https://github.com/reuven/demo"
+    )
+    assert (
+        _github_url("https://github.com/reuven/demo")
+        == "https://github.com/reuven/demo"
+    )
+
+
+def test_github_url_normalizes_ssh_scheme_and_trailing_slash() -> None:
+    assert (
+        _github_url("ssh://git@github.com/reuven/demo.git")
+        == "https://github.com/reuven/demo"
+    )
+    assert (
+        _github_url("https://github.com/reuven/demo/")
+        == "https://github.com/reuven/demo"
+    )
+
+
+def test_github_url_non_github_or_empty_is_none() -> None:
+    assert _github_url("https://gitlab.com/foo/bar.git") is None
+    assert _github_url("") is None
+
+
+def test_github_url_reads_real_repo_remote(tmp_path: Path) -> None:
+    import subprocess
+
+    repo = tmp_path / "demo"
+    repo.mkdir()
+    subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True)
+    subprocess.run(
+        ["git", "remote", "add", "origin", "git@github.com:reuven/demo.git"],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+    )
+    assert github_url(repo) == "https://github.com/reuven/demo"
+
+
+def test_github_url_no_remote_is_none(tmp_path: Path) -> None:
+    import subprocess
+
+    repo = tmp_path / "norem"
+    repo.mkdir()
+    subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True)
+    assert github_url(repo) is None
+
+
+def test_print_course_indents_summary_and_url(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    course = _make_course(tmp_path, "algebra")
+    with patch(
+        "setup_course_github.list_courses.github_url",
+        return_value="https://github.com/reuven/algebra",
+    ):
+        _print_course(course, 2, True)
+    out = capsys.readouterr().out
+    assert out.splitlines() == [
+        "  algebra — 1 notebooks (n/a)",
+        "    https://github.com/reuven/algebra",
+    ]
+
+
+def test_print_course_no_urls_omits_url_line(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    course = _make_course(tmp_path, "algebra")
+    with patch("setup_course_github.list_courses.github_url") as mock_url:
+        _print_course(course, 4, False)
+    out = capsys.readouterr().out
+    assert out.splitlines() == ["    algebra — 1 notebooks (n/a)"]
+    mock_url.assert_not_called()
 
 
 def test_resolve_scan_dirs_cli_overrides_config() -> None:
@@ -200,7 +288,7 @@ def test_main_lists_active_and_archived(
 
     config = _config_for(archive, [str(active_root)])
     with patch("setup_course_github.list_courses.load_config", return_value=config):
-        with patch("sys.argv", ["list-courses"]):
+        with patch("sys.argv", ["list-courses", "--no-urls"]):
             main()
     out = capsys.readouterr().out
     assert "Active courses:" in out
@@ -236,7 +324,7 @@ def test_main_cli_dirs_override(
     archive.mkdir()
     config = _config_for(archive, ["/unused/config/path"])
     with patch("setup_course_github.list_courses.load_config", return_value=config):
-        with patch("sys.argv", ["list-courses", "--dir", str(cli_root)]):
+        with patch("sys.argv", ["list-courses", "--dir", str(cli_root), "--no-urls"]):
             main()
     out = capsys.readouterr().out
     assert "cli-course" in out
@@ -393,7 +481,7 @@ def test_main_archived_flag_expands_listing(
     _make_course(archive / "2026", "gone-course")
     config = _config_for(archive, [str(active_root)])
     with patch("setup_course_github.list_courses.load_config", return_value=config):
-        with patch("sys.argv", ["list-courses", "--archived"]):
+        with patch("sys.argv", ["list-courses", "--archived", "--no-urls"]):
             main()
     out = capsys.readouterr().out
     assert "Archived courses:" in out
@@ -412,7 +500,7 @@ def test_main_active_flag_only(
     _make_course(archive / "2026", "gone-course")
     config = _config_for(archive, [str(active_root)])
     with patch("setup_course_github.list_courses.load_config", return_value=config):
-        with patch("sys.argv", ["list-courses", "--active"]):
+        with patch("sys.argv", ["list-courses", "--active", "--no-urls"]):
             main()
     out = capsys.readouterr().out
     assert "live-course" in out
@@ -431,7 +519,7 @@ def test_main_name_filter_active_and_archive_summary(
     _make_course(archive / "2026", "Apple-old")
     config = _config_for(archive, [str(active_root)])
     with patch("setup_course_github.list_courses.load_config", return_value=config):
-        with patch("sys.argv", ["list-courses", "cisco"]):
+        with patch("sys.argv", ["list-courses", "cisco", "--no-urls"]):
             main()
     out = capsys.readouterr().out
     assert "Cisco-live" in out
@@ -450,7 +538,7 @@ def test_main_name_filter_with_archived_expands(
     _make_course(archive / "2026", "Apple-c")
     config = _config_for(archive, [])
     with patch("setup_course_github.list_courses.load_config", return_value=config):
-        with patch("sys.argv", ["list-courses", "cisco", "--archived"]):
+        with patch("sys.argv", ["list-courses", "cisco", "--archived", "--no-urls"]):
             main()
     out = capsys.readouterr().out
     assert "Cisco-a" in out
@@ -469,7 +557,7 @@ def test_main_year_focus_suppresses_active(
     _make_course(archive / "2025", "old-2025")
     config = _config_for(archive, [str(active_root)])
     with patch("setup_course_github.list_courses.load_config", return_value=config):
-        with patch("sys.argv", ["list-courses", "--year", "2024"]):
+        with patch("sys.argv", ["list-courses", "--year", "2024", "--no-urls"]):
             main()
     out = capsys.readouterr().out
     assert "old-2024" in out
@@ -486,12 +574,53 @@ def test_main_year_repeatable(
     _make_course(archive / "2026", "c-2026")
     config = _config_for(archive, [])
     with patch("setup_course_github.list_courses.load_config", return_value=config):
-        with patch("sys.argv", ["list-courses", "--year", "2024", "--year", "2026"]):
+        with patch(
+            "sys.argv",
+            ["list-courses", "--year", "2024", "--year", "2026", "--no-urls"],
+        ):
             main()
     out = capsys.readouterr().out
     assert "c-2024" in out
     assert "c-2026" in out
     assert "c-2025" not in out
+
+
+def test_main_year_range(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    archive = tmp_path / "archive"
+    _make_course(archive / "2020", "c-2020")
+    _make_course(archive / "2021", "c-2021")
+    _make_course(archive / "2022", "c-2022")
+    _make_course(archive / "2023", "c-2023")
+    config = _config_for(archive, [])
+    with patch("setup_course_github.list_courses.load_config", return_value=config):
+        with patch("sys.argv", ["list-courses", "--year", "2021-2022", "--no-urls"]):
+            main()
+    out = capsys.readouterr().out
+    assert "c-2021" in out
+    assert "c-2022" in out
+    assert "c-2020" not in out
+    assert "c-2023" not in out
+
+
+def test_main_year_mixed_single_and_range(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    archive = tmp_path / "archive"
+    for y in ("2019", "2020", "2021", "2022", "2023"):
+        _make_course(archive / y, f"c-{y}")
+    config = _config_for(archive, [])
+    with patch("setup_course_github.list_courses.load_config", return_value=config):
+        with patch(
+            "sys.argv",
+            ["list-courses", "--year", "2019", "--year", "2021-2022", "--no-urls"],
+        ):
+            main()
+    out = capsys.readouterr().out
+    assert "c-2019" in out
+    assert "c-2021" in out
+    assert "c-2022" in out
+    assert "c-2020" not in out
+    assert "c-2023" not in out
 
 
 def test_main_year_reversed_range_prints_note_to_stderr(
@@ -502,7 +631,7 @@ def test_main_year_reversed_range_prints_note_to_stderr(
     _make_course(archive / "2021", "c-2021")
     config = _config_for(archive, [])
     with patch("setup_course_github.list_courses.load_config", return_value=config):
-        with patch("sys.argv", ["list-courses", "--year", "2021-2020"]):
+        with patch("sys.argv", ["list-courses", "--year", "2021-2020", "--no-urls"]):
             main()
     captured = capsys.readouterr()
     assert "swapped reversed year range 2021-2020 → 2020-2021" in captured.err
@@ -520,11 +649,108 @@ def test_main_active_year_shows_active_ignores_year(
     _make_course(archive / "2024", "old-2024")
     config = _config_for(archive, [str(active_root)])
     with patch("setup_course_github.list_courses.load_config", return_value=config):
-        with patch("sys.argv", ["list-courses", "--active", "--year", "2024"]):
+        with patch(
+            "sys.argv", ["list-courses", "--active", "--year", "2024", "--no-urls"]
+        ):
             main()
     out = capsys.readouterr().out
     assert "live-course" in out
     assert "old-2024" not in out
+
+
+def test_main_shows_github_url_by_default(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    active_root = tmp_path / "current"
+    active_root.mkdir()
+    _make_course(active_root, "live-course")
+    archive = tmp_path / "archive"
+    archive.mkdir()
+    config = _config_for(archive, [str(active_root)])
+    with patch("setup_course_github.list_courses.load_config", return_value=config):
+        with patch(
+            "setup_course_github.list_courses.github_url",
+            return_value="https://github.com/reuven/live-course",
+        ):
+            with patch("sys.argv", ["list-courses"]):
+                main()
+    out = capsys.readouterr().out
+    assert "  live-course — " in out
+    assert "    https://github.com/reuven/live-course" in out
+
+
+def test_main_url_placeholder_when_no_remote(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    active_root = tmp_path / "current"
+    active_root.mkdir()
+    _make_course(active_root, "live-course")
+    archive = tmp_path / "archive"
+    archive.mkdir()
+    config = _config_for(archive, [str(active_root)])
+    with patch("setup_course_github.list_courses.load_config", return_value=config):
+        with patch("setup_course_github.list_courses.github_url", return_value=None):
+            with patch("sys.argv", ["list-courses"]):
+                main()
+    out = capsys.readouterr().out
+    assert "    (no GitHub remote)" in out
+
+
+def test_main_no_urls_suppresses_url_lines(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    active_root = tmp_path / "current"
+    active_root.mkdir()
+    _make_course(active_root, "live-course")
+    archive = tmp_path / "archive"
+    archive.mkdir()
+    config = _config_for(archive, [str(active_root)])
+    with patch("setup_course_github.list_courses.load_config", return_value=config):
+        with patch(
+            "setup_course_github.list_courses.github_url",
+            return_value="https://github.com/reuven/live-course",
+        ) as mock_url:
+            with patch("sys.argv", ["list-courses", "--no-urls"]):
+                main()
+    out = capsys.readouterr().out
+    assert "live-course" in out
+    assert "https://github.com/reuven/live-course" not in out
+    assert "(no GitHub remote)" not in out
+    mock_url.assert_not_called()
+
+
+def test_main_archived_url_indented_six_spaces(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    archive = tmp_path / "archive"
+    _make_course(archive / "2026", "gone-course")
+    config = _config_for(archive, [])
+    with patch("setup_course_github.list_courses.load_config", return_value=config):
+        with patch(
+            "setup_course_github.list_courses.github_url",
+            return_value="https://github.com/reuven/gone-course",
+        ):
+            with patch("sys.argv", ["list-courses", "--archived"]):
+                main()
+    out = capsys.readouterr().out
+    assert "    gone-course — " in out
+    assert "      https://github.com/reuven/gone-course" in out
+
+
+def test_main_count_prints_no_urls(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    active_root = tmp_path / "current"
+    active_root.mkdir()
+    _make_course(active_root, "live-course")
+    archive = tmp_path / "archive"
+    archive.mkdir()
+    config = _config_for(archive, [str(active_root)])
+    with patch("setup_course_github.list_courses.load_config", return_value=config):
+        with patch("setup_course_github.list_courses.github_url") as mock_url:
+            with patch("sys.argv", ["list-courses", "--count"]):
+                main()
+    mock_url.assert_not_called()
 
 
 def test_main_count(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
