@@ -494,6 +494,22 @@ def test_main_year_repeatable(
     assert "c-2025" not in out
 
 
+def test_main_year_reversed_range_prints_note_to_stderr(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    archive = tmp_path / "archive"
+    _make_course(archive / "2020", "c-2020")
+    _make_course(archive / "2021", "c-2021")
+    config = _config_for(archive, [])
+    with patch("setup_course_github.list_courses.load_config", return_value=config):
+        with patch("sys.argv", ["list-courses", "--year", "2021-2020"]):
+            main()
+    captured = capsys.readouterr()
+    assert "swapped reversed year range 2021-2020 → 2020-2021" in captured.err
+    assert "c-2020" in captured.out
+    assert "c-2021" in captured.out
+
+
 def test_main_active_year_shows_active_ignores_year(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
