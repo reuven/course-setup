@@ -5,7 +5,11 @@ import pytest
 
 from setup_course_github.config import CourseConfig
 from setup_course_github.list_courses import (
+    _matches_names,
+    archive_summary_line,
     course_summary_line,
+    filter_active,
+    filter_archived,
     find_active_courses,
     find_archived_courses,
     is_archived_course,
@@ -234,3 +238,86 @@ def test_main_cli_dirs_override(
             main()
     out = capsys.readouterr().out
     assert "cli-course" in out
+
+
+def test_matches_names_empty_patterns_matches_all() -> None:
+    assert _matches_names("anything", []) is True
+
+
+def test_matches_names_case_insensitive_substring() -> None:
+    assert _matches_names("Cisco-2024-Python", ["cisco"]) is True
+    assert _matches_names("Cisco-2024-Python", ["CISCO"]) is True
+    assert _matches_names("Apple-2024", ["cisco"]) is False
+
+
+def test_matches_names_multiple_patterns_or() -> None:
+    assert _matches_names("Apple-2024", ["cisco", "apple"]) is True
+    assert _matches_names("Google-2024", ["cisco", "apple"]) is False
+
+
+def test_filter_active_keeps_only_matches(tmp_path: Path) -> None:
+    a = tmp_path / "Cisco-A"
+    b = tmp_path / "Apple-B"
+    result = filter_active([a, b], ["cisco"])
+    assert [p.name for p in result] == ["Cisco-A"]
+
+
+def test_filter_archived_by_year(tmp_path: Path) -> None:
+    archived = {
+        "2024": [tmp_path / "2024" / "c1"],
+        "2025": [tmp_path / "2025" / "c2"],
+    }
+    result = filter_archived(archived, ["2024"], [])
+    assert list(result.keys()) == ["2024"]
+
+
+def test_filter_archived_by_multiple_years(tmp_path: Path) -> None:
+    archived = {
+        "2023": [tmp_path / "2023" / "a"],
+        "2024": [tmp_path / "2024" / "b"],
+        "2025": [tmp_path / "2025" / "c"],
+    }
+    result = filter_archived(archived, ["2023", "2025"], [])
+    assert sorted(result.keys()) == ["2023", "2025"]
+
+
+def test_filter_archived_by_name_drops_empty_years(tmp_path: Path) -> None:
+    archived = {
+        "2024": [tmp_path / "2024" / "Cisco-x", tmp_path / "2024" / "Apple-y"],
+        "2025": [tmp_path / "2025" / "Apple-z"],
+    }
+    result = filter_archived(archived, [], ["cisco"])
+    assert list(result.keys()) == ["2024"]
+    assert [p.name for p in result["2024"]] == ["Cisco-x"]
+
+
+def test_archive_summary_line_multi_year(tmp_path: Path) -> None:
+    archived = {
+        "2018": [tmp_path / "a", tmp_path / "b"],
+        "2026": [tmp_path / "c"],
+    }
+    line = archive_summary_line(archived, [])
+    assert line == (
+        "Archived: 3 courses across 2018–2026 — use --archived to list them."
+    )
+
+
+def test_archive_summary_line_single_year(tmp_path: Path) -> None:
+    archived = {"2024": [tmp_path / "a"]}
+    line = archive_summary_line(archived, [])
+    assert "across 2024 " in line
+    assert "–" not in line  # no en-dash range for a single year
+
+
+def test_archive_summary_line_with_name_filter(tmp_path: Path) -> None:
+    archived = {"2024": [tmp_path / "Cisco-a"]}
+    line = archive_summary_line(archived, ["cisco"])
+    assert line.startswith('Archived: 1 courses matching "cisco" across 2024')
+
+
+def test_archive_summary_line_none(tmp_path: Path) -> None:
+    assert archive_summary_line({}, []) == "Archived: none"
+
+
+def test_archive_summary_line_none_with_filter(tmp_path: Path) -> None:
+    assert archive_summary_line({}, ["cisco"]) == 'Archived: none matching "cisco"'

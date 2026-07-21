@@ -45,6 +45,57 @@ def course_summary_line(path: Path) -> str:
     return f"{path.name} — {count} notebooks ({span})"
 
 
+def _matches_names(name: str, patterns: list[str]) -> bool:
+    """True if *name* (case-insensitively) contains any of *patterns*.
+
+    An empty *patterns* list matches everything.
+    """
+    if not patterns:
+        return True
+    lowered = name.lower()
+    return any(p.lower() in lowered for p in patterns)
+
+
+def filter_active(courses: list[Path], patterns: list[str]) -> list[Path]:
+    """Keep only active-course paths whose name matches *patterns*."""
+    return [c for c in courses if _matches_names(c.name, patterns)]
+
+
+def filter_archived(
+    archived: dict[str, list[Path]], years: list[str], patterns: list[str]
+) -> dict[str, list[Path]]:
+    """Filter the {year: courses} map by *years* (if non-empty) and *patterns*.
+
+    Years not in *years* are dropped; within a kept year, courses are filtered by
+    name; years left with no matching courses are omitted.
+    """
+    result: dict[str, list[Path]] = {}
+    for year, courses in archived.items():
+        if years and year not in years:
+            continue
+        matched = [c for c in courses if _matches_names(c.name, patterns)]
+        if matched:
+            result[year] = matched
+    return result
+
+
+def archive_summary_line(archived: dict[str, list[Path]], patterns: list[str]) -> str:
+    """One-line summary of the archived-course count and year span."""
+    total = sum(len(courses) for courses in archived.values())
+    match_clause = ""
+    if patterns:
+        quoted = ", ".join(f'"{p}"' for p in patterns)
+        match_clause = f" matching {quoted}"
+    if total == 0:
+        return f"Archived: none{match_clause}"
+    years = sorted(archived.keys())
+    span = years[0] if len(years) == 1 else f"{years[0]}–{years[-1]}"
+    return (
+        f"Archived: {total} courses{match_clause} across {span}"
+        " — use --archived to list them."
+    )
+
+
 def resolve_scan_dirs(cli_dirs: list[str], config: CourseConfig) -> list[Path]:
     """Choose which directories to scan: CLI args, else config, else cwd."""
     if cli_dirs:
