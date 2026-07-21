@@ -206,7 +206,8 @@ list-courses
 ```
 
 A read-only command: nothing is modified, and no GitHub API calls are made (it
-reads your config file but does not use the network).
+reads your config file, and each course's local `git` remote, but does not use
+the network).
 
 > **Breaking change (3.2.0):** the positional argument used to be a
 > scan-directory override (`list-courses ~/Other`). It is now a **name
@@ -223,13 +224,21 @@ directory (an archived course is any non-hidden, non-junk directory under a
 ```
 Active courses:
   Acme-python-intro-2026-03 — 5 notebooks (2026-03-17 → 2026-03-21)
+    https://github.com/acme/python-intro-2026-03
   Beta-pandas-2026-02 — 3 notebooks (2026-02-02 → 2026-02-16)
+    https://github.com/beta/pandas-2026-02
 
 Archived: 412 courses across 2018–2026 — use --archived to list them.
 ```
 
 Each course line is shown as `name — N notebooks (first-date → last-date)`,
-with dates parsed from notebook filenames (`n/a` if none are found).
+with dates parsed from notebook filenames (`n/a` if none are found). By
+default, an indented line below each *listed* course (active courses, and
+archived courses in the expanded `--archived`/`--year` views) shows its GitHub
+URL, read from the course's local `git` `origin` remote — no network call. A
+course with no usable GitHub remote shows `(no GitHub remote)` instead. Pass
+`--no-urls` to hide these lines. URLs are not shown in the one-line archive
+summary or with `--count`.
 
 | Argument / Option | Description |
 |----------|-------------|
@@ -237,8 +246,9 @@ with dates parsed from notebook filenames (`n/a` if none are found).
 | `--dir PATH` | Directory to scan for active courses (repeatable; replaces `course_dirs` from config for this run) |
 | `--active` | Show only the active-courses section |
 | `--archived` | Show only the archived-courses section, expanded and grouped by year |
-| `--year YYYY` | Restrict archived courses to a year (repeatable, 4-digit years only); implies `--archived` unless `--active` is also given, in which case `--year` is ignored |
+| `--year YYYY[-YYYY]` | Restrict archived courses to a year or an inclusive `YYYY-YYYY` range (repeatable; singles and ranges mix freely); implies `--archived` unless `--active` is also given, in which case `--year` is ignored. A reversed range (e.g. `2022-2020`) is auto-swapped, printing `Note: swapped reversed year range 2022-2020 → 2020-2022` to stderr. |
 | `--count` | Print counts instead of course lines, honoring all other filters |
+| `--no-urls` | Hide the per-course GitHub URL line shown by default under each listed course |
 | `--version` | Show the version number, PyPI URL, author name, and email |
 
 Directories to scan for active courses are resolved in this order:
@@ -258,11 +268,14 @@ Directories to scan for active courses are resolved in this order:
 | `list-courses cisco --archived` | archived courses matching "cisco" (all years, expanded) |
 | `list-courses --year 2024` | archive for 2024 only (active section suppressed) |
 | `list-courses --year 2024 --year 2025` | archive for 2024 and 2025 only |
+| `list-courses --year 2020-2022` | archive for 2020 through 2022 only (inclusive range) |
+| `list-courses --year 2019 --year 2021-2023` | archive for 2019, 2021, 2022, 2023 (singles and ranges mix) |
 | `list-courses cisco --year 2024` | archived courses matching "cisco" from 2024 only |
 | `list-courses --active --year 2024` | active only (`--year` is ignored for active) |
 | `list-courses --count` | `Active courses: 3` + `Archived courses: 412` + per-year counts |
 | `list-courses cisco --count` | counts of active + archived courses matching "cisco" |
 | `list-courses --dir ~/Other` | scan `~/Other` for active courses instead of config `course_dirs` |
+| `list-courses --no-urls` | active courses in full, without the per-course GitHub URL lines |
 
 If there are no matching active or archived courses, it prints an empty-state
 line (e.g. `No active courses found`, or `No active courses match: cisco` when
