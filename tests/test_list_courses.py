@@ -8,6 +8,7 @@ from setup_course_github.list_courses import (
     course_summary_line,
     find_active_courses,
     find_archived_courses,
+    is_archived_course,
     is_course,
     main,
     resolve_scan_dirs,
@@ -18,7 +19,7 @@ MARIMO_SOURCE = "import marimo\n\napp = marimo.App()\n"
 
 def _make_course(parent: Path, name: str, notebook: str = "lesson.ipynb") -> Path:
     course = parent / name
-    course.mkdir()
+    course.mkdir(parents=True)
     (course / ".git").mkdir()
     (course / notebook).write_text("{}")
     return course
@@ -120,8 +121,8 @@ def test_find_active_courses_skips_missing_dir(tmp_path: Path) -> None:
 
 
 def test_find_archived_courses_grouped_by_year(tmp_path: Path) -> None:
-    (tmp_path / "2025" / "old-course").mkdir(parents=True)
-    (tmp_path / "2026" / "newer-course").mkdir(parents=True)
+    _make_course(tmp_path / "2025", "old-course")
+    _make_course(tmp_path / "2026", "newer-course")
     result = find_archived_courses(tmp_path)
     assert list(result.keys()) == ["2025", "2026"]
     assert [p.name for p in result["2026"]] == ["newer-course"]
@@ -132,11 +133,45 @@ def test_find_archived_courses_missing_archive(tmp_path: Path) -> None:
     assert find_archived_courses(missing) == {}
 
 
-def test_find_archived_courses_skips_non_dir_entries(tmp_path: Path) -> None:
-    (tmp_path / "2026" / "some-course").mkdir(parents=True)
-    (tmp_path / "README.txt").write_text("not a year directory")
+def test_find_archived_courses_ignores_non_year_dirs(tmp_path: Path) -> None:
+    _make_course(tmp_path / "2026", "real-course")
+    _make_course(tmp_path / "build", "not-a-year")  # non-year top-level dir
+    (tmp_path / "README.txt").write_text("stray file")
     result = find_archived_courses(tmp_path)
     assert list(result.keys()) == ["2026"]
+
+
+def test_find_archived_courses_skips_junk_and_zero_notebook_dirs(
+    tmp_path: Path,
+) -> None:
+    year = tmp_path / "2024"
+    _make_course(year, "real-course")
+    (year / ".git").mkdir(parents=True)  # hidden
+    (year / ".ipynb_checkpoints").mkdir()  # hidden
+    (year / "__pycache__").mkdir()  # junk name
+    (year / "empty-course").mkdir()  # a dir with no notebooks
+    result = find_archived_courses(tmp_path)
+    assert [p.name for p in result["2024"]] == ["real-course"]
+
+
+def test_is_archived_course_requires_notebook_not_git(tmp_path: Path) -> None:
+    # No .git required for an archived course, but a notebook IS required.
+    with_nb = tmp_path / "has-nb"
+    with_nb.mkdir()
+    (with_nb / "lesson.ipynb").write_text("{}")
+    assert is_archived_course(with_nb) is True
+
+    without_nb = tmp_path / "no-nb"
+    without_nb.mkdir()
+    assert is_archived_course(without_nb) is False
+
+
+def test_is_archived_course_rejects_junk_and_hidden_names(tmp_path: Path) -> None:
+    for name in ("__pycache__", ".ipynb_checkpoints", ".git"):
+        d = tmp_path / name
+        d.mkdir()
+        (d / "lesson.ipynb").write_text("{}")  # even with a notebook
+        assert is_archived_course(d) is False
 
 
 def _config_for(archive: Path, course_dirs: list[str]) -> CourseConfig:
@@ -155,7 +190,7 @@ def test_main_lists_active_and_archived(
     active_root.mkdir()
     _make_course(active_root, "live-course")
     archive = tmp_path / "archive"
-    (archive / "2026" / "gone-course").mkdir(parents=True)
+    _make_course(archive / "2026", "gone-course")
 
     config = _config_for(archive, [str(active_root)])
     with patch("setup_course_github.list_courses.load_config", return_value=config):

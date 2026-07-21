@@ -1,14 +1,37 @@
 import argparse
+import re
 from pathlib import Path
 
 from setup_course_github import __author__, __email__, __version__
 from setup_course_github.config import CourseConfig, load_config
 from setup_course_github.notebooks import date_range, find_notebooks
 
+JUNK_NAMES = frozenset(
+    {"__pycache__", "build", "dist", "bin", "include", "lib", "node_modules"}
+)
+_YEAR_RE = re.compile(r"^\d{4}$")
+
+
+def _is_junk_name(name: str) -> bool:
+    """True for hidden (dot-prefixed) or known build/cache directory names."""
+    return name.startswith(".") or name in JUNK_NAMES
+
 
 def is_course(path: Path) -> bool:
     """A course is a directory with a .git subdir and at least one notebook."""
     if not (path / ".git").is_dir():
+        return False
+    ipynb_files, marimo_files = find_notebooks(path)
+    return bool(ipynb_files or marimo_files)
+
+
+def is_archived_course(path: Path) -> bool:
+    """An archived course: a non-junk directory containing at least one notebook.
+
+    Unlike active courses, a ``.git`` subdir is NOT required (archived repos may
+    have had it stripped).
+    """
+    if _is_junk_name(path.name):
         return False
     ipynb_files, marimo_files = find_notebooks(path)
     return bool(ipynb_files or marimo_files)
@@ -44,14 +67,20 @@ def find_active_courses(scan_dirs: list[Path]) -> list[Path]:
 
 
 def find_archived_courses(archive_path: Path) -> dict[str, list[Path]]:
-    """Return {year: [course dirs]} found under archive_path/<year>/<course>."""
+    """Return {year: [course dirs]} under archive_path/<YYYY>/<course>.
+
+    Only directories named like a 4-digit year are treated as year groups, and
+    only ``is_archived_course`` children are included.
+    """
     result: dict[str, list[Path]] = {}
     if not archive_path.is_dir():
         return result
     for year_dir in sorted(archive_path.iterdir()):
-        if not year_dir.is_dir():
+        if not (year_dir.is_dir() and _YEAR_RE.match(year_dir.name)):
             continue
-        courses = sorted(c for c in year_dir.iterdir() if c.is_dir())
+        courses = sorted(
+            c for c in year_dir.iterdir() if c.is_dir() and is_archived_course(c)
+        )
         if courses:
             result[year_dir.name] = courses
     return result
