@@ -826,6 +826,17 @@ notebook that triggered the install is retried automatically once Chromium is
 ready, and later notebooks in the same run proceed normally (the install
 happens at most once per `archive-course` invocation).
 
+If that automatic install itself fails (e.g. no network), `archive-course`
+falls back to printing that same command for you to run yourself:
+
+```
+Could not install Chromium automatically; skipping PDF.
+  To enable it, run: uv run playwright install chromium
+```
+
+PDF export is skipped for the rest of the run, but the archive still
+completes normally with HTML exports and the zip.
+
 **Courses created before 3.3.1** don't have `nbconvert[webpdf]` as a
 dependency yet. To enable PDF export on one, run this once inside the course
 directory:
@@ -840,8 +851,8 @@ again and Chromium installs itself as described above.
 
 **If PDF export still can't run** -- the library is missing and you haven't
 added it yet, the Chromium auto-install itself fails (e.g. no network), or
-some other export error occurs -- `archive-course` prints a concise one-line
-hint rather than a full traceback, and still completes the archive normally
+some other export error occurs -- `archive-course` prints a concise hint
+rather than a full traceback, and still completes the archive normally
 (HTML exports and the zip are unaffected). For example, a missing library
 prints:
 
