@@ -194,11 +194,14 @@ installation required). New Jupyter courses (3.3.1+) include the
 `nbconvert[webpdf]` dependency out of the box, and `archive-course`
 auto-installs the Chromium browser itself the first time it's needed — a
 one-time, per-machine download, with a status line printed while it installs.
-You no longer run any `playwright` command by hand. For a course created
-before 3.3.1, run `uv add "nbconvert[webpdf]"` in it once; `archive-course`
-still handles Chromium from there. If PDF export still can't run,
-`archive-course` prints a concise one-line hint (not a traceback) and skips
-PDF — the rest of the archive (HTML exports, zip) is still produced. After
+You no longer run any `playwright` command by hand — and if that automatic
+install ever fails (e.g. offline), `archive-course` prints the one-time
+`uv run playwright install chromium` command for you to run yourself, and
+still completes the archive with HTML. For a course created before 3.3.1,
+run `uv add "nbconvert[webpdf]"` in it once; `archive-course` still handles
+Chromium from there. If PDF export still can't run, `archive-course` prints
+a concise hint (not a traceback) and skips PDF — the rest of the archive
+(HTML exports, zip) is still produced. After
 creating the archive, a summary is printed listing the archive path, file
 count, size, notebooks (shown as `notebook.ipynb + notebook.html +
 notebook.pdf`), export counts, and all other included files.
