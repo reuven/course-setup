@@ -84,7 +84,7 @@ def _build_pyproject_toml(
 ) -> str:
     """Generate a pyproject.toml string for the new course directory."""
     deps = (
-        ["jupyter", "ipyparallel", "gitautopush"]
+        ["jupyter", "nbconvert[webpdf]", "ipyparallel", "gitautopush"]
         if notebook_type == "jupyter"
         else ["marimo", "gitautopush"]
     )
@@ -429,7 +429,7 @@ def main() -> None:
         _print_status(f"  Notebook type: {notebook_type}")
         _print_status(f"  Notebooks: {', '.join(notebook_filenames)}")
         deps = (
-            ["jupyter", "ipyparallel", "gitautopush"]
+            ["jupyter", "nbconvert[webpdf]", "ipyparallel", "gitautopush"]
             if notebook_type == "jupyter"
             else ["marimo", "gitautopush"]
         )

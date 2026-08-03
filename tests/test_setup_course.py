@@ -1065,7 +1065,7 @@ def test_no_extras_flag_produces_only_base_deps(course_env: dict[str, Any]) -> N
     with open(dest / "pyproject.toml", "rb") as f:
         data = tomllib.load(f)
     deps = data["project"]["dependencies"]
-    assert deps == ["jupyter", "ipyparallel", "gitautopush"]
+    assert deps == ["jupyter", "nbconvert[webpdf]", "ipyparallel", "gitautopush"]
 
 
 def test_jupyter_deps_include_ipyparallel(course_env: dict[str, Any]) -> None:

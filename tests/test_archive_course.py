@@ -320,8 +320,9 @@ def test_export_notebook_to_pdf_runs_webpdf(tmp_path: Path) -> None:
     nb = course / "lesson.ipynb"
     nb.write_text("{}")
     with patch("subprocess.run") as mock_run:
-        result = _export_notebook_to_pdf(nb, course)
-    assert result is True
+        ok, stderr = _export_notebook_to_pdf(nb, course)
+    assert ok is True
+    assert stderr == ""
     args = mock_run.call_args
     assert args.kwargs["cwd"] == str(course)
     cmd = args.args[0]
@@ -334,6 +335,9 @@ def test_export_notebook_to_pdf_runs_webpdf(tmp_path: Path) -> None:
         "webpdf",
         "lesson.ipynb",
     ]
+    # check=True is load-bearing: without it a failed export would look like success
+    assert args.kwargs["check"] is True
+    assert args.kwargs["capture_output"] is True
 
 
 def test_export_notebook_to_pdf_handles_called_process_error(tmp_path: Path) -> None:
@@ -345,8 +349,9 @@ def test_export_notebook_to_pdf_handles_called_process_error(tmp_path: Path) -> 
     nb.write_text("{}")
     err = subprocess.CalledProcessError(1, "nbconvert", stderr=b"chromium missing")
     with patch("subprocess.run", side_effect=err):
-        result = _export_notebook_to_pdf(nb, course)
-    assert result is False
+        ok, stderr = _export_notebook_to_pdf(nb, course)
+    assert ok is False
+    assert "chromium missing" in stderr
 
 
 def test_export_notebook_to_pdf_handles_missing_binary(tmp_path: Path) -> None:
@@ -357,8 +362,199 @@ def test_export_notebook_to_pdf_handles_missing_binary(tmp_path: Path) -> None:
     nb = course / "lesson.ipynb"
     nb.write_text("{}")
     with patch("subprocess.run", side_effect=FileNotFoundError()):
-        result = _export_notebook_to_pdf(nb, course)
-    assert result is False
+        ok, stderr = _export_notebook_to_pdf(nb, course)
+    assert ok is False
+
+
+def test_install_chromium_runs_playwright(tmp_path: Path) -> None:
+    from setup_course_github.archive_course import _install_chromium
+
+    course = tmp_path / "course"
+    course.mkdir()
+    with patch("subprocess.run") as mock_run:
+        mock_run.return_value = MagicMock(returncode=0)
+        assert _install_chromium(course) is True
+    cmd = mock_run.call_args.args[0]
+    assert cmd == ["uv", "run", "playwright", "install", "chromium"]
+    assert mock_run.call_args.kwargs["cwd"] == str(course)
+    assert mock_run.call_args.kwargs["capture_output"] is True
+
+
+def test_export_notebooks_to_pdf_install_failure_stops_no_second_install(
+    tmp_path: Path,
+) -> None:
+    """When chromium install fails, stop (break) — don't retry install per notebook.
+
+    Pins `break` (vs `continue`) in the install-failure branch: with two
+    chromium-failing notebooks, `_install_chromium` is attempted exactly once.
+    """
+    from setup_course_github.archive_course import _export_notebooks_to_pdf
+
+    course = tmp_path / "course"
+    course.mkdir()
+    nbs = [course / "a.ipynb", course / "b.ipynb"]
+    with patch(
+        "setup_course_github.archive_course._export_notebook_to_pdf",
+        return_value=(False, "Executable doesn't exist"),
+    ):
+        with patch(
+            "setup_course_github.archive_course._install_chromium",
+            return_value=False,
+        ) as mock_install:
+            count = _export_notebooks_to_pdf(nbs, course)
+    assert count == 0
+    mock_install.assert_called_once()
+
+
+def test_export_notebooks_to_pdf_installs_chromium_only_once_across_notebooks(
+    tmp_path: Path,
+) -> None:
+    """After a successful install, a later chromium failure does NOT re-install.
+
+    Pins the `chromium_installed = True` guard: notebook a triggers a successful
+    install + retry; notebook b also reports chromium-missing but must NOT cause a
+    second install, so `_install_chromium` is called exactly once.
+    """
+    from setup_course_github.archive_course import _export_notebooks_to_pdf
+
+    course = tmp_path / "course"
+    course.mkdir()
+    nbs = [course / "a.ipynb", course / "b.ipynb"]
+    # a: chromium-missing, retry ok; b: chromium-missing (already installed)
+    results = iter(
+        [
+            (False, "Executable doesn't exist"),
+            (True, ""),
+            (False, "Executable doesn't exist"),
+        ]
+    )
+    with patch(
+        "setup_course_github.archive_course._export_notebook_to_pdf",
+        side_effect=lambda *a, **k: next(results),
+    ):
+        with patch(
+            "setup_course_github.archive_course._install_chromium",
+            return_value=True,
+        ) as mock_install:
+            count = _export_notebooks_to_pdf(nbs, course)
+    assert count == 1
+    mock_install.assert_called_once()
+
+
+def test_install_chromium_returns_false_on_failure(tmp_path: Path) -> None:
+    from setup_course_github.archive_course import _install_chromium
+
+    course = tmp_path / "course"
+    course.mkdir()
+    with patch("subprocess.run") as mock_run:
+        mock_run.return_value = MagicMock(returncode=1)
+        assert _install_chromium(course) is False
+
+
+def test_export_notebooks_to_pdf_all_succeed(tmp_path: Path) -> None:
+    from setup_course_github.archive_course import _export_notebooks_to_pdf
+
+    course = tmp_path / "course"
+    course.mkdir()
+    nbs = [course / "a.ipynb", course / "b.ipynb"]
+    with patch(
+        "setup_course_github.archive_course._export_notebook_to_pdf",
+        return_value=(True, ""),
+    ):
+        with patch(
+            "setup_course_github.archive_course._install_chromium"
+        ) as mock_install:
+            count = _export_notebooks_to_pdf(nbs, course)
+    assert count == 2
+    mock_install.assert_not_called()
+
+
+def test_export_notebooks_to_pdf_installs_chromium_once_then_retries(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from setup_course_github.archive_course import _export_notebooks_to_pdf
+
+    course = tmp_path / "course"
+    course.mkdir()
+    nbs = [course / "a.ipynb", course / "b.ipynb"]
+    # a.ipynb: first call chromium-missing, retry succeeds; b.ipynb succeeds
+    results = iter([(False, "Executable doesn't exist"), (True, ""), (True, "")])
+    with patch(
+        "setup_course_github.archive_course._export_notebook_to_pdf",
+        side_effect=lambda *a, **k: next(results),
+    ):
+        with patch(
+            "setup_course_github.archive_course._install_chromium",
+            return_value=True,
+        ) as mock_install:
+            count = _export_notebooks_to_pdf(nbs, course)
+    assert count == 2
+    mock_install.assert_called_once()
+    out = capsys.readouterr().out
+    assert "Installing it once now" in out
+    assert "Chromium installed." in out
+
+
+def test_export_notebooks_to_pdf_install_failure_degrades(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from setup_course_github.archive_course import _export_notebooks_to_pdf
+
+    course = tmp_path / "course"
+    course.mkdir()
+    nbs = [course / "a.ipynb"]
+    with patch(
+        "setup_course_github.archive_course._export_notebook_to_pdf",
+        return_value=(False, "Executable doesn't exist"),
+    ):
+        with patch(
+            "setup_course_github.archive_course._install_chromium",
+            return_value=False,
+        ):
+            count = _export_notebooks_to_pdf(nbs, course)
+    assert count == 0
+    assert "Could not install Chromium" in capsys.readouterr().out
+
+
+def test_export_notebooks_to_pdf_lib_missing_prints_hint_once(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from setup_course_github.archive_course import _export_notebooks_to_pdf
+
+    course = tmp_path / "course"
+    course.mkdir()
+    nbs = [course / "a.ipynb", course / "b.ipynb"]
+    with patch(
+        "setup_course_github.archive_course._export_notebook_to_pdf",
+        return_value=(False, "Please install `nbconvert[webpdf]`"),
+    ):
+        with patch(
+            "setup_course_github.archive_course._install_chromium"
+        ) as mock_install:
+            count = _export_notebooks_to_pdf(nbs, course)
+    assert count == 0
+    mock_install.assert_not_called()
+    out = capsys.readouterr().out
+    assert out.count('uv add "nbconvert[webpdf]"') == 1  # printed once, not per-nb
+
+
+def test_export_notebooks_to_pdf_other_error_warns_and_continues(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from setup_course_github.archive_course import _export_notebooks_to_pdf
+
+    course = tmp_path / "course"
+    course.mkdir()
+    nbs = [course / "a.ipynb", course / "b.ipynb"]
+    results = iter([(False, "weird\nRuntimeError: nope"), (True, "")])
+    with patch(
+        "setup_course_github.archive_course._export_notebook_to_pdf",
+        side_effect=lambda *a, **k: next(results),
+    ):
+        count = _export_notebooks_to_pdf(nbs, course)
+    assert count == 1
+    out = capsys.readouterr().out
+    assert "Warning: failed to export a.ipynb to PDF: RuntimeError: nope" in out
 
 
 def test_archive_notebook_with_spaces_in_name(tmp_path: Path) -> None:
@@ -621,9 +817,9 @@ def test_archive_exports_pdf_by_default(
     course.mkdir()
     (course / "lesson.ipynb").write_text("{}")
 
-    def fake_pdf(nb_path: Path, course_path: Path) -> bool:
+    def fake_pdf(nb_path: Path, course_path: Path) -> tuple[bool, str]:
         nb_path.with_suffix(".pdf").write_text("%PDF-fake")
-        return True
+        return True, ""
 
     with patch(
         "setup_course_github.archive_course._export_notebook_to_html",
@@ -667,9 +863,9 @@ def test_archive_summary_lists_pdf_next_to_notebook(
     course.mkdir()
     (course / "lesson.ipynb").write_text("{}")
 
-    def fake_pdf(nb_path: Path, course_path: Path) -> bool:
+    def fake_pdf(nb_path: Path, course_path: Path) -> tuple[bool, str]:
         nb_path.with_suffix(".pdf").write_text("%PDF-fake")
-        return True
+        return True, ""
 
     with patch(
         "setup_course_github.archive_course._export_notebook_to_html",
@@ -718,7 +914,7 @@ def test_archive_pdf_export_count_accumulates_across_notebooks(
     ):
         with patch(
             "setup_course_github.archive_course._export_notebook_to_pdf",
-            return_value=True,
+            return_value=(True, ""),
         ):
             archive_course(str(course), output=str(tmp_path / "out.zip"))
 
@@ -744,7 +940,7 @@ def test_archive_failed_pdf_export_not_counted(
     ):
         with patch(
             "setup_course_github.archive_course._export_notebook_to_pdf",
-            return_value=False,
+            return_value=(False, ""),
         ):
             archive_course(str(course), output=str(tmp_path / "out.zip"))
 
@@ -774,3 +970,43 @@ def test_archive_no_pdf_ignores_existing_pdf_file(
     output = capsys.readouterr().out
     assert "lesson.ipynb + lesson.pdf" not in output
     assert "lesson.ipynb" in output
+
+
+def test_last_error_line_returns_last_nonblank() -> None:
+    from setup_course_github.archive_course import _last_error_line
+
+    assert _last_error_line("first\nRuntimeError: boom\n\n") == "RuntimeError: boom"
+    assert _last_error_line("   ") == ""
+    assert _last_error_line("") == ""
+
+
+def test_pdf_failure_kind_lib() -> None:
+    from setup_course_github.archive_course import _pdf_failure_kind
+
+    assert (
+        _pdf_failure_kind("ModuleNotFoundError: No module named 'playwright'") == "lib"
+    )
+    assert _pdf_failure_kind("Please install `nbconvert[webpdf]` to enable.") == "lib"
+    assert (
+        _pdf_failure_kind("Playwright is not installed to support Web PDF conversion")
+        == "lib"
+    )
+
+
+def test_pdf_failure_kind_chromium() -> None:
+    from setup_course_github.archive_course import _pdf_failure_kind
+
+    assert _pdf_failure_kind("Executable doesn't exist at /x/chromium") == "chromium"
+    assert _pdf_failure_kind("please run: playwright install") == "chromium"
+    assert _pdf_failure_kind("download new browsers") == "chromium"
+
+
+def test_pdf_failure_kind_other_and_priority() -> None:
+    from setup_course_github.archive_course import _pdf_failure_kind
+
+    assert _pdf_failure_kind("some unrelated error") == "other"
+    # lib signal wins even if a chromium phrase is also present
+    assert (
+        _pdf_failure_kind("No module named 'playwright'; try playwright install")
+        == "lib"
+    )
