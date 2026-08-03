@@ -190,14 +190,18 @@ notebooks, etc.), excluding `.git`, `.venv`, `__pycache__`, and
 exported to HTML and to PDF, and both are included alongside the original;
 use `--no-html` / `--no-pdf` to skip either export. PDF export is **on by
 default**, via `nbconvert --to webpdf` (headless Chromium — no LaTeX
-installation required). The first time you export to PDF, you may need to
-run `uv run playwright install chromium` inside the course directory to
-download the Chromium binary. If the PDF engine isn't available, `archive-course`
-prints a warning and skips PDF for that notebook rather than failing — the
-rest of the archive is still produced. After creating the archive, a summary
-is printed listing the archive path, file count, size, notebooks (shown as
-`notebook.ipynb + notebook.html + notebook.pdf`), export counts, and all
-other included files.
+installation required). New Jupyter courses (3.3.1+) include the
+`nbconvert[webpdf]` dependency out of the box, and `archive-course`
+auto-installs the Chromium browser itself the first time it's needed — a
+one-time, per-machine download, with a status line printed while it installs.
+You no longer run any `playwright` command by hand. For a course created
+before 3.3.1, run `uv add "nbconvert[webpdf]"` in it once; `archive-course`
+still handles Chromium from there. If PDF export still can't run,
+`archive-course` prints a concise one-line hint (not a traceback) and skips
+PDF — the rest of the archive (HTML exports, zip) is still produced. After
+creating the archive, a summary is printed listing the archive path, file
+count, size, notebooks (shown as `notebook.ipynb + notebook.html +
+notebook.pdf`), export counts, and all other included files.
 
 ### `list-courses` — List active and archived courses
 
