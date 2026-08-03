@@ -335,6 +335,9 @@ def test_export_notebook_to_pdf_runs_webpdf(tmp_path: Path) -> None:
         "webpdf",
         "lesson.ipynb",
     ]
+    # check=True is load-bearing: without it a failed export would look like success
+    assert args.kwargs["check"] is True
+    assert args.kwargs["capture_output"] is True
 
 
 def test_export_notebook_to_pdf_handles_called_process_error(tmp_path: Path) -> None:
@@ -374,6 +377,68 @@ def test_install_chromium_runs_playwright(tmp_path: Path) -> None:
     cmd = mock_run.call_args.args[0]
     assert cmd == ["uv", "run", "playwright", "install", "chromium"]
     assert mock_run.call_args.kwargs["cwd"] == str(course)
+    assert mock_run.call_args.kwargs["capture_output"] is True
+
+
+def test_export_notebooks_to_pdf_install_failure_stops_no_second_install(
+    tmp_path: Path,
+) -> None:
+    """When chromium install fails, stop (break) — don't retry install per notebook.
+
+    Pins `break` (vs `continue`) in the install-failure branch: with two
+    chromium-failing notebooks, `_install_chromium` is attempted exactly once.
+    """
+    from setup_course_github.archive_course import _export_notebooks_to_pdf
+
+    course = tmp_path / "course"
+    course.mkdir()
+    nbs = [course / "a.ipynb", course / "b.ipynb"]
+    with patch(
+        "setup_course_github.archive_course._export_notebook_to_pdf",
+        return_value=(False, "Executable doesn't exist"),
+    ):
+        with patch(
+            "setup_course_github.archive_course._install_chromium",
+            return_value=False,
+        ) as mock_install:
+            count = _export_notebooks_to_pdf(nbs, course)
+    assert count == 0
+    mock_install.assert_called_once()
+
+
+def test_export_notebooks_to_pdf_installs_chromium_only_once_across_notebooks(
+    tmp_path: Path,
+) -> None:
+    """After a successful install, a later chromium failure does NOT re-install.
+
+    Pins the `chromium_installed = True` guard: notebook a triggers a successful
+    install + retry; notebook b also reports chromium-missing but must NOT cause a
+    second install, so `_install_chromium` is called exactly once.
+    """
+    from setup_course_github.archive_course import _export_notebooks_to_pdf
+
+    course = tmp_path / "course"
+    course.mkdir()
+    nbs = [course / "a.ipynb", course / "b.ipynb"]
+    # a: chromium-missing, retry ok; b: chromium-missing (already installed)
+    results = iter(
+        [
+            (False, "Executable doesn't exist"),
+            (True, ""),
+            (False, "Executable doesn't exist"),
+        ]
+    )
+    with patch(
+        "setup_course_github.archive_course._export_notebook_to_pdf",
+        side_effect=lambda *a, **k: next(results),
+    ):
+        with patch(
+            "setup_course_github.archive_course._install_chromium",
+            return_value=True,
+        ) as mock_install:
+            count = _export_notebooks_to_pdf(nbs, course)
+    assert count == 1
+    mock_install.assert_called_once()
 
 
 def test_install_chromium_returns_false_on_failure(tmp_path: Path) -> None:
