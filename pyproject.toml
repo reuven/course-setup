@@ -53,6 +53,8 @@ dev = [
 [tool.ruff]
   line-length = 88
   target-version = "py313"
+  # docs/ holds point-in-time planning artifacts; don't lint/format their code snippets
+  extend-exclude = ["docs"]
 
 [tool.ruff.lint]
   select = ["E", "F", "I", "B", "UP"]
