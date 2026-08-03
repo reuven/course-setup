@@ -8,6 +8,36 @@ from pathlib import Path
 from setup_course_github import __author__, __email__, __version__
 
 
+def _last_error_line(stderr: str) -> str:
+    """Return the last non-blank line of *stderr* (stripped), or "" if none."""
+    lines = [line.strip() for line in stderr.splitlines() if line.strip()]
+    return lines[-1] if lines else ""
+
+
+def _pdf_failure_kind(stderr: str) -> str:
+    """Classify a webpdf failure as 'lib', 'chromium', or 'other'.
+
+    'lib' (the nbconvert[webpdf]/playwright library is missing) takes priority
+    over 'chromium' (the browser binary is missing) when both appear.
+    """
+    low = stderr.lower()
+    lib_signals = (
+        "nbconvert[webpdf]",
+        "no module named 'playwright'",
+        "playwright is not installed to support web pdf",
+    )
+    if any(signal in low for signal in lib_signals):
+        return "lib"
+    chromium_signals = (
+        "playwright install",
+        "executable doesn't exist",
+        "download new browsers",
+    )
+    if any(signal in low for signal in chromium_signals):
+        return "chromium"
+    return "other"
+
+
 def _export_notebook(nb_path: Path, course_path: Path, fmt: str, label: str) -> bool:
     """Export a notebook to *fmt* via nbconvert. Returns True on success.
 

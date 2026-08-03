@@ -774,3 +774,43 @@ def test_archive_no_pdf_ignores_existing_pdf_file(
     output = capsys.readouterr().out
     assert "lesson.ipynb + lesson.pdf" not in output
     assert "lesson.ipynb" in output
+
+
+def test_last_error_line_returns_last_nonblank() -> None:
+    from setup_course_github.archive_course import _last_error_line
+
+    assert _last_error_line("first\nRuntimeError: boom\n\n") == "RuntimeError: boom"
+    assert _last_error_line("   ") == ""
+    assert _last_error_line("") == ""
+
+
+def test_pdf_failure_kind_lib() -> None:
+    from setup_course_github.archive_course import _pdf_failure_kind
+
+    assert (
+        _pdf_failure_kind("ModuleNotFoundError: No module named 'playwright'") == "lib"
+    )
+    assert _pdf_failure_kind("Please install `nbconvert[webpdf]` to enable.") == "lib"
+    assert (
+        _pdf_failure_kind("Playwright is not installed to support Web PDF conversion")
+        == "lib"
+    )
+
+
+def test_pdf_failure_kind_chromium() -> None:
+    from setup_course_github.archive_course import _pdf_failure_kind
+
+    assert _pdf_failure_kind("Executable doesn't exist at /x/chromium") == "chromium"
+    assert _pdf_failure_kind("please run: playwright install") == "chromium"
+    assert _pdf_failure_kind("download new browsers") == "chromium"
+
+
+def test_pdf_failure_kind_other_and_priority() -> None:
+    from setup_course_github.archive_course import _pdf_failure_kind
+
+    assert _pdf_failure_kind("some unrelated error") == "other"
+    # lib signal wins even if a chromium phrase is also present
+    assert (
+        _pdf_failure_kind("No module named 'playwright'; try playwright install")
+        == "lib"
+    )
