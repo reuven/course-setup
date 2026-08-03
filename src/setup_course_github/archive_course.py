@@ -57,7 +57,8 @@ def _export_notebook(nb_path: Path, course_path: Path, fmt: str, label: str) -> 
     except subprocess.CalledProcessError as exc:
         stderr = exc.stderr.decode() if exc.stderr else ""
         print(
-            f"  Warning: failed to export {nb_path.name} to {label}: {stderr.strip()}"
+            f"  Warning: failed to export {nb_path.name} to {label}: "
+            f"{_last_error_line(stderr)}"
         )
         return False
     except FileNotFoundError:
@@ -70,9 +71,74 @@ def _export_notebook_to_html(nb_path: Path, course_path: Path) -> bool:
     return _export_notebook(nb_path, course_path, "html", "HTML")
 
 
-def _export_notebook_to_pdf(nb_path: Path, course_path: Path) -> bool:
-    """Export a single notebook to PDF via webpdf. Returns True on success."""
-    return _export_notebook(nb_path, course_path, "webpdf", "PDF")
+def _export_notebook_to_pdf(nb_path: Path, course_path: Path) -> tuple[bool, str]:
+    """Run webpdf export for one notebook. Returns (ok, stderr); does not print."""
+    relative = nb_path.relative_to(course_path)
+    try:
+        subprocess.run(
+            ["uv", "run", "jupyter", "nbconvert", "--to", "webpdf", str(relative)],
+            cwd=str(course_path),
+            capture_output=True,
+            check=True,
+        )
+        return True, ""
+    except subprocess.CalledProcessError as exc:
+        return False, exc.stderr.decode() if exc.stderr else ""
+    except FileNotFoundError:
+        return False, "jupyter nbconvert not found"
+
+
+def _install_chromium(course_path: Path) -> bool:
+    """Install the chromium browser for webpdf via the course's playwright.
+
+    Returns True on success. Runs `uv run playwright install chromium` in the
+    course dir; the browser lands in a shared per-machine cache.
+    """
+    result = subprocess.run(
+        ["uv", "run", "playwright", "install", "chromium"],
+        cwd=str(course_path),
+        capture_output=True,
+    )
+    return result.returncode == 0
+
+
+def _export_notebooks_to_pdf(notebooks: list[Path], course_path: Path) -> int:
+    """Export notebooks to PDF, auto-installing chromium once if needed.
+
+    Returns the number of PDFs produced. Prints concise, actionable messages and
+    never raises — a failure leaves the HTML export + zip intact.
+    """
+    exported = 0
+    chromium_installed = False
+    for nb_path in notebooks:
+        ok, stderr = _export_notebook_to_pdf(nb_path, course_path)
+        if ok:
+            exported += 1
+            continue
+        kind = _pdf_failure_kind(stderr)
+        if kind == "lib":
+            print("  PDF export needs the webpdf extra. In the course dir run:")
+            print('    uv add "nbconvert[webpdf]"')
+            print("  (then archive again, or use --no-pdf to skip PDF.)")
+            break
+        if kind == "chromium" and not chromium_installed:
+            print("  Chromium isn't installed yet (needed for PDF export).")
+            print("  Installing it once now — this may take a minute...")
+            if not _install_chromium(course_path):
+                print("  Could not install Chromium automatically; skipping PDF.")
+                print("    To enable it, run: uv run playwright install chromium")
+                break
+            chromium_installed = True
+            print("  Chromium installed.")
+            ok, stderr = _export_notebook_to_pdf(nb_path, course_path)
+            if ok:
+                exported += 1
+                continue
+        print(
+            f"  Warning: failed to export {nb_path.name} to PDF: "
+            f"{_last_error_line(stderr)}"
+        )
+    return exported
 
 
 def archive_course(
@@ -108,9 +174,7 @@ def archive_course(
     pdf_exported = 0
     if export_pdf and notebooks:
         print("Exporting notebooks to PDF...")
-        for nb_path in notebooks:
-            if _export_notebook_to_pdf(nb_path, course_path):
-                pdf_exported += 1
+        pdf_exported = _export_notebooks_to_pdf(notebooks, course_path)
 
     # Determine output path
     if output is not None:
