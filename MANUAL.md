@@ -781,8 +781,10 @@ archive-course DIRNAME [--output PATH] [--no-html] [--no-pdf] [--version]
    `uv run jupyter nbconvert --to webpdf`, which renders the PDF with headless
    Chromium instead of requiring a LaTeX installation. This is **on by
    default**; pass `--no-pdf` to skip it, or it is skipped automatically if no
-   notebooks are found. See [PDF export requirements](#pdf-export-requirements)
-   below for one-time setup and failure behavior.
+   notebooks are found. `archive-course` auto-installs the Chromium browser
+   itself the first time a course needs it. See
+   [PDF export requirements](#pdf-export-requirements) below for one-time
+   setup and failure behavior.
 4. **Creates a zip archive** containing all files in the course directory
    (including the generated `.html` and `.pdf` files), excluding `.git`,
    `.venv`, `__pycache__`, and `.ipynb_checkpoints` directories. The archive
@@ -799,20 +801,58 @@ archive-course DIRNAME [--output PATH] [--no-html] [--no-pdf] [--version]
 #### PDF export requirements
 
 PDF export uses `nbconvert`'s `webpdf` exporter, which drives a headless
-Chromium browser instead of requiring a LaTeX toolchain. The first time you
-export to PDF in a given course environment, you may need to download the
-Chromium binary:
+Chromium browser instead of requiring a LaTeX toolchain. That needs two
+things: the `nbconvert[webpdf]` library (which bundles Playwright) as a
+course dependency, and the Chromium browser binary itself.
+
+**New courses (3.3.1+)** are set up with `nbconvert[webpdf]` in their
+`pyproject.toml` automatically, so nothing extra needs installing there.
+Marimo courses don't need it, since `archive-course` only exports `.ipynb`
+notebooks.
+
+**Chromium is handled automatically too.** The first time `archive-course`
+needs it in a given course environment and it isn't there yet, it installs
+it for you -- a one-time, per-machine download -- and prints a short status
+line while it works:
 
 ```
-uv run playwright install chromium
+Chromium isn't installed yet (needed for PDF export).
+Installing it once now — this may take a minute...
+Chromium installed.
 ```
 
-If the PDF engine isn't available (Chromium not installed, or `nbconvert`
-itself missing), `archive-course` prints a warning and skips PDF export for
-that notebook rather than failing -- the rest of the archive (HTML exports
-and the zip itself) is still produced normally. Use `--no-pdf` to opt out of
-PDF export entirely, e.g. on machines where installing Chromium isn't
-practical.
+You no longer need to run `uv run playwright install chromium` by hand; the
+notebook that triggered the install is retried automatically once Chromium is
+ready, and later notebooks in the same run proceed normally (the install
+happens at most once per `archive-course` invocation).
+
+**Courses created before 3.3.1** don't have `nbconvert[webpdf]` as a
+dependency yet. To enable PDF export on one, run this once inside the course
+directory:
+
+```
+uv add "nbconvert[webpdf]"
+```
+
+That's a real, committable change to the course's own dependencies, so
+`archive-course` never makes it for you. After adding it, archive the course
+again and Chromium installs itself as described above.
+
+**If PDF export still can't run** -- the library is missing and you haven't
+added it yet, the Chromium auto-install itself fails (e.g. no network), or
+some other export error occurs -- `archive-course` prints a concise one-line
+hint rather than a full traceback, and still completes the archive normally
+(HTML exports and the zip are unaffected). For example, a missing library
+prints:
+
+```
+PDF export needs the webpdf extra. In the course dir run:
+  uv add "nbconvert[webpdf]"
+(then archive again, or use --no-pdf to skip PDF.)
+```
+
+Use `--no-pdf` to opt out of PDF export entirely, e.g. on machines where
+installing Chromium isn't practical.
 
 #### Examples
 
@@ -847,8 +887,9 @@ archive-course ./Acme-python-intro-2026-03 --no-pdf
 ```
 
 Creates the zip with all course files but skips the PDF conversion step
-(HTML export still runs). Useful if Chromium isn't installed and you don't
-want to see the per-notebook warning.
+(HTML export still runs). Useful on machines where you'd rather not trigger
+the one-time Chromium download at all, or on courses where `nbconvert[webpdf]`
+hasn't been added yet.
 
 ---
 
