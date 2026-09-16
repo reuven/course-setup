@@ -88,11 +88,12 @@ These conflicts are deliberate. Resolve them this way:
   figure.
 - Push automatically after committing.
 - Merge finished feature branches straight into main. No PR needed.
-- Tag every version bump -- any version -- as `1.2.0` (no `v` prefix), in sync with the
-  version in `pyproject.toml`. Shipping code only.
+- Tag every version bump -- any version. The tag is the version in `pyproject.toml`
+  with a `v` prefix: version `1.2.0` gets tag `v1.2.0`. Shipping code only.
 - Before building and publishing, delete all old versions in `dist/`. The Git tags mean
   nothing is lost.
-- Set up `.gitignore` before the first commit.
+- Set up `.gitignore` before the first commit. Always include editor and OS cruft:
+  `#*#`, `.#*`, `*~`, `*.swp`, `.DS_Store`.
 - Ask before any destructive Git operation: force-push, hard reset, history rewrite, or
   branch deletion.
 
