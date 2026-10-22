@@ -409,6 +409,13 @@ def archive_course(
         for name in other_files:
             print(f"  {name}")
 
+    # Record the omissions in the summary: whoever receives this archive should
+    # be told what is missing, and the full member name says where it belonged.
+    if dropped:
+        print("Left out (too big to email):")
+        for name in dropped:
+            print(f"  {name}")
+
     return zip_path
 
 

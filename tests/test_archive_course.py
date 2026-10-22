@@ -1490,3 +1490,47 @@ def test_main_passes_keep_all(tmp_path: Path) -> None:
             main()
 
     assert mock_archive.call_args.kwargs["keep_all"] is True
+
+
+# ---------------------------------------------------------------------------
+# size guard: reporting what was left out
+# ---------------------------------------------------------------------------
+
+
+def test_archive_summary_names_the_files_left_out(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The summary records every omission, so nothing vanishes quietly."""
+    course_dir = _course_with_big_file(tmp_path)
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    monkeypatch.setattr("builtins.input", lambda _: "y")
+
+    archive_course(
+        str(course_dir),
+        output=str(tmp_path / "c.zip"),
+        export_html=False,
+        export_pdf=False,
+        max_size=0.01,
+    )
+
+    out = capsys.readouterr().out
+    assert "Left out (too big to email):" in out
+    assert "mycourse/data/big.csv" in out.split("Left out (too big to email):")[1]
+
+
+def test_archive_summary_omits_the_section_when_nothing_was_dropped(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A normal archive has no omissions section."""
+    course_dir = tmp_path / "mycourse"
+    course_dir.mkdir()
+    (course_dir / "lesson.txt").write_text("hello")
+
+    archive_course(
+        str(course_dir),
+        output=str(tmp_path / "c.zip"),
+        export_html=False,
+        export_pdf=False,
+    )
+
+    assert "Left out" not in capsys.readouterr().out
