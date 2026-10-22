@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from setup_course_github.archive_course import (
+    _format_size,
     _member_contributions,
     _size_candidates,
     archive_course,
@@ -1100,3 +1101,20 @@ def test_size_candidates_floor_is_at_least_one_byte() -> None:
     contributions = {"empty.txt": 0, "some.txt": 1}
 
     assert _size_candidates(contributions, 10) == [("some.txt", 1)]
+
+
+# ---------------------------------------------------------------------------
+# size guard: human-readable sizes
+# ---------------------------------------------------------------------------
+
+
+def test_format_size_uses_kb_below_one_megabyte() -> None:
+    """Sub-megabyte sizes read in KB with one decimal."""
+    assert _format_size(1536) == "1.5 KB"
+    assert _format_size(1024 * 1024 - 1) == "1024.0 KB"
+
+
+def test_format_size_uses_mb_from_one_megabyte_up() -> None:
+    """A full megabyte and above reads in MB."""
+    assert _format_size(1024 * 1024) == "1.0 MB"
+    assert _format_size(3 * 1024 * 1024 + 512 * 1024) == "3.5 MB"

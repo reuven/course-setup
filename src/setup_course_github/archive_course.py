@@ -141,6 +141,17 @@ def _export_notebooks_to_pdf(notebooks: list[Path], course_path: Path) -> int:
     return exported
 
 
+def _format_size(num_bytes: int) -> str:
+    """Render a byte count the way the archive summary and prompts both want it.
+
+    Shared so that the size a prompt quotes for a file and the size the summary
+    quotes for the archive are always in the same units and precision.
+    """
+    if num_bytes < 1024 * 1024:
+        return f"{num_bytes / 1024:.1f} KB"
+    return f"{num_bytes / (1024 * 1024):.1f} MB"
+
+
 def _member_contributions(zip_path: Path) -> dict[str, int]:
     """Map each member of *zip_path* to the bytes it contributes to the archive.
 
@@ -235,12 +246,7 @@ def archive_course(
     with zipfile.ZipFile(zip_path, "r") as zf:
         file_count = len(zf.namelist())
 
-    zip_size = zip_path.stat().st_size
-    size_str = (
-        f"{zip_size / 1024:.1f} KB"
-        if zip_size < 1024 * 1024
-        else f"{zip_size / (1024 * 1024):.1f} MB"
-    )
+    size_str = _format_size(zip_path.stat().st_size)
 
     # Collect non-notebook, non-HTML, non-PDF files for the summary
     notebook_names = {nb.name for nb in notebooks}
