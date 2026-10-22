@@ -134,7 +134,7 @@ def _export_notebooks_to_pdf(notebooks: list[Path], course_path: Path) -> int:
             print("  Chromium installed.")
             ok, stderr = _export_notebook_to_pdf(nb_path, course_path)
             if ok:
-                exported += 1
+                exported = 1
                 continue
         print(
             f"  Warning: failed to export {nb_path.name} to PDF: "

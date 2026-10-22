@@ -753,7 +753,8 @@ working directory and makes the GitHub repo public.
 #### Synopsis
 
 ```
-archive-course DIRNAME [--output PATH] [--no-html] [--no-pdf] [--version]
+archive-course DIRNAME [--output PATH] [--no-html] [--no-pdf]
+               [--max-size MB] [--keep-all] [--version]
 ```
 
 #### Arguments
@@ -769,6 +770,8 @@ archive-course DIRNAME [--output PATH] [--no-html] [--no-pdf] [--version]
 | `--output`, `-o` | No | Custom output path for the zip file. Defaults to `{dirname}.zip` in the current working directory. |
 | `--no-html` | No | Skip HTML export of Jupyter notebooks. By default, each `.ipynb` file is exported to HTML via `nbconvert` and both the `.ipynb` and `.html` are included in the zip. |
 | `--no-pdf` | No | Skip PDF export of Jupyter notebooks. By default, each `.ipynb` file is also exported to PDF (see below) and included alongside the `.ipynb`/`.html` files. |
+| `--max-size MB` | No | Size in MB above which the archive is too big to email comfortably. If the finished zip exceeds it, you are asked which of the largest files to leave out. Defaults to `10`; pass `0` to skip the check entirely. Accepts fractions (`--max-size 7.5`). |
+| `--keep-all` | No | Include every file without being asked anything. An oversized archive is still reported, so you know before you try to send it. |
 | `--version` | No | Show the version number, PyPI URL, author, and email, then exit. |
 
 #### What it does
@@ -790,13 +793,67 @@ archive-course DIRNAME [--output PATH] [--no-html] [--no-pdf] [--version]
    `.venv`, `__pycache__`, and `.ipynb_checkpoints` directories. The archive
    preserves the directory structure, with the course directory as the
    top-level folder inside the zip.
-5. **Prints a summary** showing:
+5. **Checks that the archive is small enough to send**, and if it isn't, asks
+   which of the largest files to leave out, then rewrites the zip without
+   them. See [Keeping the archive mailable](#keeping-the-archive-mailable)
+   below.
+6. **Prints a summary** showing:
    - Archive path and file count
    - Archive size (displayed in KB or MB)
    - List of notebooks and their corresponding HTML/PDF exports, shown as
      `notebook.ipynb + notebook.html + notebook.pdf`
    - `HTML exports: N` and `PDF exports: N` counts
    - List of all other included files (`.py`, `.csv`, `.toml`, etc.)
+   - `Left out (too big to email):` and the member names, if any file was
+     dropped by the size check
+
+#### Keeping the archive mailable
+
+Course archives are normally sent to the client as a mail attachment. A
+dataset left behind in the course directory doesn't break the archive, but it
+can push it past what mail will carry -- and those datasets are nearly always
+available from their original source, so leaving one out costs the client very
+little. `archive-course` therefore builds the zip first, measures it, and only
+if it is over `--max-size` offers to shed the files responsible.
+
+**Sizes are measured, not estimated.** The figures in the prompt are each
+member's *compressed* size, read back out of the archive that was just
+written. ZIP deflates every member independently -- there is no cross-file
+compression -- so a member's compressed size is what it costs in the finished
+file, to within the ~100 bytes of header that go with it. This matters: a
+19 MB CSV typically deflates to around 4.5 MB, so judging by size on disk
+would raise an alarm about a file that was never a problem, while an already
+compressed PNG or PDF contributes nearly its full size.
+
+**The goal is a sendable archive, not a tidy one.** Files are offered largest
+first, and the questions stop the moment the archive would be under the limit
+-- one oversized dataset costs one question. The walk also stops early if the
+files still on offer could not close the gap even if you dropped all of them,
+since those questions have no useful answer. Files contributing less than 1%
+of the limit are never offered: they cannot close a real overage, and an
+archive that is over the limit only because of hundreds of small files is
+reported rather than whittled at.
+
+**Keeping a file is always the default.** Only an explicit `y` leaves a file
+out; anything else keeps it. Each question shows what the archive would weigh
+without the file, so the effect of the answer is visible before you give it:
+
+```
+Archive is 4.6 MB, over the 3.0 MB limit.
+  The biggest files are listed first. Leaving one out is enough if
+  it brings the archive under the limit.
+  demo-course/data/survey.csv — 4.5 MB
+    Archive would be 76.4 KB without it.
+    Leave it out? [y/N] y
+```
+
+Everything left out is named in the summary, so an omission is never silent.
+
+**Nothing is ever prompted non-interactively.** If standard input is not a
+terminal -- a script, a cron job, CI, a piped run -- `archive-course` keeps
+every file and prints a warning naming the oversized archive, so automation
+is never blocked waiting on an answer. `--keep-all` behaves the same way on a
+terminal, and `--max-size 0` skips the check altogether.
 
 #### PDF export requirements
 
@@ -901,6 +958,25 @@ Creates the zip with all course files but skips the PDF conversion step
 (HTML export still runs). Useful on machines where you'd rather not trigger
 the one-time Chromium download at all, or on courses where `nbconvert[webpdf]`
 hasn't been added yet.
+
+Allow a larger attachment before being asked anything:
+
+```
+archive-course ./Acme-python-intro-2026-03 --max-size 25
+```
+
+Useful when you know the recipient's mail server accepts more than the
+default 10 MB.
+
+Archive everything, no questions:
+
+```
+archive-course ./Acme-python-intro-2026-03 --keep-all
+```
+
+Includes every file. An oversized archive is still reported so you find out
+now rather than when the mail bounces. `--max-size 0` goes further and skips
+the size check entirely.
 
 ---
 
