@@ -38,19 +38,35 @@ as soon as the archive is under the limit.
 
 ## Tasks
 
-- [ ] 1. Feature branch `feature/archive-size-guard`
-- [ ] 2. TDD: helper computing each file's exact compressed contribution
-- [ ] 3. TDD: selection logic — rank by contribution, walk largest-first, stop
+- [x] 1. Feature branch `feature/archive-size-guard`
+- [x] 2. TDD: helper computing each file's exact compressed contribution
+- [x] 3. TDD: selection logic — rank by contribution, walk largest-first, stop
       once projected size is under the limit (pure function, no I/O, no prompting)
-- [ ] 4. TDD: non-interactive path — keep everything, warn, never block
-- [ ] 5. TDD: interactive prompting, with stdin stubbed
-- [ ] 6. Wire into `archive_course()`; thread `max_size` / `keep_all` through
-- [ ] 7. CLI flags `--max-size` and `--keep-all` in `main()`
-- [ ] 8. Report dropped files in the archive summary
+- [x] 4. TDD: non-interactive path — keep everything, warn, never block
+- [x] 5. TDD: interactive prompting, with stdin stubbed
+- [x] 6. Wire into `archive_course()`; thread `max_size` / `keep_all` through
+- [x] 7. CLI flags `--max-size` and `--keep-all` in `main()`
+- [x] 8. Report dropped files in the archive summary
 - [ ] 9. `ruff format`, `ruff check`, `mypy --strict`, full suite at 100% coverage
 - [ ] 10. `mutmut run` as a pre-merge audit; close real logic gaps
-- [ ] 11. Update README.md and MANUAL.md
+- [x] 11. Update README.md and MANUAL.md
 - [ ] 12. Bump version 3.3.1 → 3.4.0, tag `v3.4.0`, merge to main, delete branch, push
+
+## Changed along the way
+
+- **Build-then-trim, not estimate-then-build.** Task 2 was going to compress
+  each file separately to price it. That does the same deflate work twice, so
+  instead the zip is written normally and each member's size is read back out
+  of it with `compress_size`. Nothing is estimated, and the common case (under
+  the limit) costs one pass.
+- **Added a second stopping rule.** The first end-to-end run declined the big
+  dataset and then got asked about a 76 KB file — which could not bring a
+  4.6 MB archive under a 3 MB limit even in principle. The walk now also stops
+  when the files still on offer cannot close the gap between them.
+- **Corrected one claim.** `compress_size` leaves out each member's ~100 bytes
+  of ZIP header, so a projected size lands a couple hundred bytes under the
+  archive that follows. Never enough to change which file is the problem, but
+  not "exact" either, and the docstring now says so.
 
 ## Open question
 
