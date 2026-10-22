@@ -226,6 +226,8 @@ def test_main_calls_archive_course(tmp_path: Path) -> None:
         output=None,
         export_html=True,
         export_pdf=True,
+        max_size=10.0,
+        keep_all=False,
     )
 
 
@@ -900,7 +902,12 @@ def test_archive_main_passes_no_pdf(tmp_path: Path) -> None:
         with patch("sys.argv", ["archive-course", "--no-pdf", str(course)]):
             main()
     mock_archive.assert_called_once_with(
-        dirname=str(course), output=None, export_html=True, export_pdf=False
+        dirname=str(course),
+        output=None,
+        export_html=True,
+        export_pdf=False,
+        max_size=10.0,
+        keep_all=False,
     )
 
 
@@ -1447,3 +1454,39 @@ def test_archive_many_small_files_over_the_limit_offers_nothing(
     )
 
     assert "no single file" in capsys.readouterr().out.lower()
+
+
+def test_main_passes_max_size(tmp_path: Path) -> None:
+    """--max-size overrides the default mail-friendly ceiling."""
+    course_dir = tmp_path / "mycourse"
+    course_dir.mkdir()
+
+    with patch("setup_course_github.archive_course.archive_course") as mock_archive:
+        with patch("sys.argv", ["archive-course", str(course_dir), "--max-size", "25"]):
+            main()
+
+    assert mock_archive.call_args.kwargs["max_size"] == 25.0
+
+
+def test_main_max_size_zero_passes_through(tmp_path: Path) -> None:
+    """--max-size 0 reaches archive_course as the off switch."""
+    course_dir = tmp_path / "mycourse"
+    course_dir.mkdir()
+
+    with patch("setup_course_github.archive_course.archive_course") as mock_archive:
+        with patch("sys.argv", ["archive-course", str(course_dir), "--max-size", "0"]):
+            main()
+
+    assert mock_archive.call_args.kwargs["max_size"] == 0.0
+
+
+def test_main_passes_keep_all(tmp_path: Path) -> None:
+    """--keep-all reaches archive_course."""
+    course_dir = tmp_path / "mycourse"
+    course_dir.mkdir()
+
+    with patch("setup_course_github.archive_course.archive_course") as mock_archive:
+        with patch("sys.argv", ["archive-course", str(course_dir), "--keep-all"]):
+            main()
+
+    assert mock_archive.call_args.kwargs["keep_all"] is True

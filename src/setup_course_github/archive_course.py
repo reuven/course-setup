@@ -448,6 +448,22 @@ def main() -> None:
         default=False,
         help="Skip PDF export of notebooks",
     )
+    parser.add_argument(
+        "--max-size",
+        type=float,
+        default=10.0,
+        metavar="MB",
+        help=(
+            "Prompt to leave out the largest files if the archive exceeds this "
+            "many MB (default: 10, enough to email; 0 disables the check)"
+        ),
+    )
+    parser.add_argument(
+        "--keep-all",
+        action="store_true",
+        default=False,
+        help="Include every file without prompting, even if the archive is oversized",
+    )
     args = parser.parse_args()
 
     archive_course(
@@ -455,6 +471,8 @@ def main() -> None:
         output=args.output,
         export_html=not args.no_html,
         export_pdf=not args.no_pdf,
+        max_size=args.max_size,
+        keep_all=args.keep_all,
     )
 
 
