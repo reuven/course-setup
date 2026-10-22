@@ -31,7 +31,7 @@ def _pdf_failure_kind(stderr: str) -> str:
     if any(signal in low for signal in lib_signals):
         return "lib"
     chromium_signals = (
-        "XXplaywright installXX",
+        "playwright install",
         "executable doesn't exist",
         "download new browsers",
     )
@@ -141,6 +141,16 @@ def _export_notebooks_to_pdf(notebooks: list[Path], course_path: Path) -> int:
             f"{_last_error_line(stderr)}"
         )
     return exported
+
+
+def _megabytes_to_bytes(megabytes: float) -> int:
+    """Convert a size in MB to bytes, treating MB as 1024*1024.
+
+    Named rather than inline because the unit is a promise to the user: mail
+    clients and file managers report binary megabytes, so --max-size 10 has to
+    mean the same 10 MB they will see.
+    """
+    return int(megabytes * 1024 * 1024)
 
 
 def _format_size(num_bytes: int) -> str:
@@ -365,7 +375,7 @@ def archive_course(
     # The archive has to be small enough to email; offer to shed the big files
     # if it isn't. Measuring the finished zip is what makes the offer honest.
     dropped: list[str] = []
-    limit = int(max_size * 1024 * 1024)
+    limit = _megabytes_to_bytes(max_size)
     if limit > 0:
         dropped = _apply_size_guard(zip_path, members, limit, keep_all)
         if dropped:

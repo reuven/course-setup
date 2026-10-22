@@ -13,6 +13,7 @@ from setup_course_github.archive_course import (
     _ask_to_drop,
     _choose_drops,
     _format_size,
+    _megabytes_to_bytes,
     _member_contributions,
     _size_candidates,
     _write_zip,
@@ -1670,3 +1671,11 @@ def test_archive_max_size_is_in_mebibytes(
 def test_archive_defaults_to_a_ten_megabyte_ceiling() -> None:
     """The documented default lives in three places; pin the one in the API."""
     assert inspect.signature(archive_course).parameters["max_size"].default == 10.0
+
+
+def test_megabytes_to_bytes_uses_binary_megabytes() -> None:
+    """One MB is 1024*1024 bytes, the unit file managers and mail clients show."""
+    assert _megabytes_to_bytes(1) == 1_048_576
+    assert _megabytes_to_bytes(10) == 10_485_760
+    assert _megabytes_to_bytes(7.5) == 7_864_320
+    assert _megabytes_to_bytes(0) == 0
