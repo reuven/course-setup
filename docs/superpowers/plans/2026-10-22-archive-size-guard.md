@@ -1,6 +1,22 @@
-# TODO — archive-course size guard
+# archive-course size guard — Implementation Plan
 
-## Goal
+> **Status:** Complete. Shipped in 3.4.0 (tag `v3.4.0`, 2026-10-22).
+
+**Goal:** Keep a course archive small enough to email. When the finished zip
+would exceed a size limit, offer the biggest files largest-first until it fits.
+
+**Architecture:** One source file, `archive_course.py`. The zip is written
+normally, then measured; only if it is over the limit are the members ranked by
+their compressed contribution and offered up, after which the zip is rewritten
+without whatever was dropped. Helpers: `_megabytes_to_bytes`, `_format_size`,
+`_member_contributions`, `_size_candidates`, `_choose_drops`, `_ask_to_drop`,
+`_archive_members`, `_write_zip`, `_apply_size_guard`. One feature branch, TDD,
+merged to `main`, released as 3.4.0.
+
+**Tech Stack:** Python 3, `uv`, pytest, `zipfile`, ruff, mypy strict,
+mutmut (<3).
+
+## Background
 
 Course archives get emailed to clients. Occasionally a dataset left in the course
 directory rides along and the attachment is too big to send. Those datasets are
