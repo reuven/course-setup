@@ -1196,7 +1196,7 @@ def test_choose_drops_returns_nothing_when_everything_is_kept() -> None:
 
     dropped = _choose_drops(
         [("a.csv", 2_000_000), ("b.csv", 2_000_000)],
-        total=13_000_000,
+        total=11_000_000,
         limit=10_000_000,
         ask=ask,
     )
@@ -1229,14 +1229,14 @@ def test_choose_drops_reports_the_projected_size_after_each_drop() -> None:
 
     _choose_drops(
         [("a.csv", 2_000_000), ("b.csv", 1_000_000)],
-        total=13_000_000,
+        total=11_000_000,
         limit=10_000_000,
         ask=ask,
     )
 
     assert seen == [
-        ("a.csv", 2_000_000, 11_000_000),
-        ("b.csv", 1_000_000, 12_000_000),
+        ("a.csv", 2_000_000, 9_000_000),
+        ("b.csv", 1_000_000, 10_000_000),
     ]
 
 
@@ -1534,3 +1534,45 @@ def test_archive_summary_omits_the_section_when_nothing_was_dropped(
     )
 
     assert "Left out" not in capsys.readouterr().out
+
+
+def test_choose_drops_stops_when_no_combination_can_help(tmp_path: Path) -> None:
+    """Once the remaining candidates cannot close the gap, stop asking.
+
+    Declining the one big file leaves questions that are arithmetically
+    pointless -- dropping everything still left would not get under the limit.
+    """
+    asked: list[str] = []
+
+    def ask(name: str, size: int, projected: int) -> bool:
+        asked.append(name)
+        return False
+
+    dropped = _choose_drops(
+        [("huge.csv", 4_500_000), ("small.csv", 76_000), ("tiny.csv", 40_000)],
+        total=4_600_000,
+        limit=3_000_000,
+        ask=ask,
+    )
+
+    assert dropped == []
+    assert asked == ["huge.csv"]
+
+
+def test_choose_drops_still_asks_when_candidates_can_combine(tmp_path: Path) -> None:
+    """Several files that together close the gap are all still worth offering."""
+    asked: list[str] = []
+
+    def ask(name: str, size: int, projected: int) -> bool:
+        asked.append(name)
+        return name != "huge.csv"
+
+    dropped = _choose_drops(
+        [("huge.csv", 4_000_000), ("a.csv", 900_000), ("b.csv", 900_000)],
+        total=4_600_000,
+        limit=3_000_000,
+        ask=ask,
+    )
+
+    assert dropped == ["a.csv", "b.csv"]
+    assert asked == ["huge.csv", "a.csv", "b.csv"]

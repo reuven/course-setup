@@ -207,12 +207,18 @@ def _choose_drops(
     """
     dropped: list[str] = []
     projected = total
+    remaining = sum(size for _, size in candidates)
     for name, size in candidates:
         if projected <= limit:
+            break
+        # Asking about a file that cannot close the gap even with every other
+        # candidate behind it is a question with no useful answer.
+        if projected - remaining > limit:
             break
         if ask(name, size, projected - size):
             dropped.append(name)
             projected -= size
+        remaining -= size
     return dropped
 
 
