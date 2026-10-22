@@ -47,8 +47,8 @@ as soon as the archive is under the limit.
 - [x] 6. Wire into `archive_course()`; thread `max_size` / `keep_all` through
 - [x] 7. CLI flags `--max-size` and `--keep-all` in `main()`
 - [x] 8. Report dropped files in the archive summary
-- [ ] 9. `ruff format`, `ruff check`, `mypy --strict`, full suite at 100% coverage
-- [ ] 10. `mutmut run` as a pre-merge audit; close real logic gaps
+- [x] 9. `ruff format`, `ruff check`, `mypy --strict`, full suite at 100% coverage
+- [x] 10. `mutmut run` as a pre-merge audit; close real logic gaps
 - [x] 11. Update README.md and MANUAL.md
 - [ ] 12. Bump version 3.3.1 → 3.4.0, tag `v3.4.0`, merge to main, delete branch, push
 
@@ -67,6 +67,17 @@ as soon as the archive is under the limit.
   of ZIP header, so a projected size lands a couple hundred bytes under the
   archive that follows. Never enough to change which file is the problem, but
   not "exact" either, and the docstring now says so.
+
+## Mutation audit (task 10)
+
+214 of 278 mutants killed, 77% -- above the project's ~68% baseline. It found
+three real verification gaps, all now closed: the limit boundary itself, the
+MiB-vs-MB unit, and the 10 MB default in the signature. Of the survivors in
+the new code, four were confirmed unkillable by inspection: two `break` ->
+`continue` mutations that produce identical behavior, `dropped = None` (falsy
+either way, and invalid under mypy --strict), and `limit > 0` -> `limit > 1`,
+which differs only at a one-byte limit. The rest are string literals in output
+and help text, plus the pre-existing PDF-export baseline.
 
 ## Open question
 
