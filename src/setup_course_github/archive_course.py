@@ -232,6 +232,32 @@ def _ask_to_drop(name: str, size: int, projected: int) -> bool:
     return answer.strip().lower() in {"y", "yes"}
 
 
+def _archive_members(course_path: Path) -> dict[str, Path]:
+    """Map every archive member name to the file on disk it comes from.
+
+    Naming the members up front, rather than writing them as the directory is
+    walked, is what lets the size guard leave one out: the keys here are the
+    same names zipfile reports sizes for, so dropping a file is a dict
+    deletion and a rewrite.
+    """
+    # Directories to exclude from the zip
+    exclude_dirs = {".git", ".venv", "__pycache__", ".ipynb_checkpoints"}
+    parent = course_path.parent
+    return {
+        file_path.relative_to(parent).as_posix(): file_path
+        for file_path in sorted(course_path.rglob("*"))
+        if file_path.is_file()
+        and not (set(file_path.relative_to(course_path).parts) & exclude_dirs)
+    }
+
+
+def _write_zip(zip_path: Path, members: dict[str, Path]) -> None:
+    """Write *members* to *zip_path*, replacing anything already there."""
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        for arcname, file_path in members.items():
+            zf.write(file_path, arcname)
+
+
 def archive_course(
     dirname: str,
     output: str | None = None,
@@ -273,18 +299,9 @@ def archive_course(
     else:
         zip_path = Path(f"{course_path.name}.zip")
 
-    # Directories to exclude from the zip
-    exclude_dirs = {".git", ".venv", "__pycache__", ".ipynb_checkpoints"}
-
     # Create zip file
-    parent = course_path.parent
-    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
-        for file_path in sorted(course_path.rglob("*")):
-            if file_path.is_file() and not (
-                set(file_path.relative_to(course_path).parts) & exclude_dirs
-            ):
-                arcname = file_path.relative_to(parent)
-                zf.write(file_path, arcname)
+    members = _archive_members(course_path)
+    _write_zip(zip_path, members)
 
     # Gather info for summary
     with zipfile.ZipFile(zip_path, "r") as zf:
