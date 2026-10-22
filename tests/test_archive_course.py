@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from setup_course_github.archive_course import (
+    _choose_drops,
     _format_size,
     _member_contributions,
     _size_candidates,
@@ -1118,3 +1119,113 @@ def test_format_size_uses_mb_from_one_megabyte_up() -> None:
     """A full megabyte and above reads in MB."""
     assert _format_size(1024 * 1024) == "1.0 MB"
     assert _format_size(3 * 1024 * 1024 + 512 * 1024) == "3.5 MB"
+
+
+# ---------------------------------------------------------------------------
+# size guard: walking the candidates
+# ---------------------------------------------------------------------------
+
+
+def test_choose_drops_stops_as_soon_as_under_the_limit() -> None:
+    """One oversized file is one question, even with other candidates behind it."""
+    asked: list[str] = []
+
+    def ask(name: str, size: int, projected: int) -> bool:
+        asked.append(name)
+        return True
+
+    dropped = _choose_drops(
+        [("huge.csv", 8_000_000), ("big.csv", 2_000_000), ("mid.csv", 1_000_000)],
+        total=12_000_000,
+        limit=10_000_000,
+        ask=ask,
+    )
+
+    assert dropped == ["huge.csv"]
+    assert asked == ["huge.csv"]
+
+
+def test_choose_drops_moves_on_when_a_file_is_kept() -> None:
+    """Declining the biggest file offers the next one instead."""
+
+    def ask(name: str, size: int, projected: int) -> bool:
+        return name != "huge.csv"
+
+    dropped = _choose_drops(
+        [("huge.csv", 8_000_000), ("big.csv", 3_000_000), ("mid.csv", 1_000_000)],
+        total=12_000_000,
+        limit=10_000_000,
+        ask=ask,
+    )
+
+    assert dropped == ["big.csv"]
+
+
+def test_choose_drops_keeps_asking_until_the_overage_is_closed() -> None:
+    """Several medium files can add up to the needed saving."""
+
+    def ask(name: str, size: int, projected: int) -> bool:
+        return True
+
+    dropped = _choose_drops(
+        [("a.csv", 2_000_000), ("b.csv", 2_000_000), ("c.csv", 2_000_000)],
+        total=13_000_000,
+        limit=10_000_000,
+        ask=ask,
+    )
+
+    assert dropped == ["a.csv", "b.csv"]
+
+
+def test_choose_drops_returns_nothing_when_everything_is_kept() -> None:
+    """Declining every candidate drops nothing and still terminates."""
+    asked: list[str] = []
+
+    def ask(name: str, size: int, projected: int) -> bool:
+        asked.append(name)
+        return False
+
+    dropped = _choose_drops(
+        [("a.csv", 2_000_000), ("b.csv", 2_000_000)],
+        total=13_000_000,
+        limit=10_000_000,
+        ask=ask,
+    )
+
+    assert dropped == []
+    assert asked == ["a.csv", "b.csv"]
+
+
+def test_choose_drops_asks_nothing_when_already_under_the_limit() -> None:
+    """A small archive is never questioned, however many candidates it has."""
+
+    def ask(name: str, size: int, projected: int) -> bool:  # pragma: no cover
+        raise AssertionError("should not ask about an archive already under the limit")
+
+    assert (
+        _choose_drops(
+            [("a.csv", 2_000_000)], total=5_000_000, limit=10_000_000, ask=ask
+        )
+        == []
+    )
+
+
+def test_choose_drops_reports_the_projected_size_after_each_drop() -> None:
+    """The question carries the size the archive would become, so the effect shows."""
+    seen: list[tuple[str, int, int]] = []
+
+    def ask(name: str, size: int, projected: int) -> bool:
+        seen.append((name, size, projected))
+        return False
+
+    _choose_drops(
+        [("a.csv", 2_000_000), ("b.csv", 1_000_000)],
+        total=13_000_000,
+        limit=10_000_000,
+        ask=ask,
+    )
+
+    assert seen == [
+        ("a.csv", 2_000_000, 11_000_000),
+        ("b.csv", 1_000_000, 12_000_000),
+    ]

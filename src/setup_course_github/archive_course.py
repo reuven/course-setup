@@ -3,6 +3,7 @@
 import argparse
 import subprocess
 import zipfile
+from collections.abc import Callable
 from pathlib import Path
 
 from setup_course_github import __author__, __email__, __version__
@@ -186,6 +187,32 @@ def _size_candidates(
         ((name, size) for name, size in contributions.items() if size >= floor),
         key=lambda item: (-item[1], item[0]),
     )
+
+
+def _choose_drops(
+    candidates: list[tuple[str, int]],
+    total: int,
+    limit: int,
+    ask: Callable[[str, int, int], bool],
+) -> list[str]:
+    """Offer candidates largest-first until the archive would fit under *limit*.
+
+    The goal is a sendable archive, not a clean sweep, so the walk stops the
+    moment the projected size is under the limit -- one oversized dataset costs
+    one question. Keeping a file simply moves the offer to the next candidate.
+    *ask* receives the member's name, what it contributes, and what the archive
+    would weigh without it; it is injected so the decision logic stays free of
+    any I/O.
+    """
+    dropped: list[str] = []
+    projected = total
+    for name, size in candidates:
+        if projected <= limit:
+            break
+        if ask(name, size, projected - size):
+            dropped.append(name)
+            projected -= size
+    return dropped
 
 
 def archive_course(
