@@ -2,6 +2,7 @@
 
 import argparse
 import subprocess
+import sys
 import zipfile
 from collections.abc import Callable
 from pathlib import Path
@@ -258,15 +259,66 @@ def _write_zip(zip_path: Path, members: dict[str, Path]) -> None:
             zf.write(file_path, arcname)
 
 
+def _apply_size_guard(
+    zip_path: Path,
+    members: dict[str, Path],
+    limit: int,
+    keep_all: bool,
+) -> list[str]:
+    """Offer to shrink an over-limit archive; returns the members left out.
+
+    Course archives get emailed, so an archive over the mail limit is a problem
+    even though it was built correctly. Datasets left in a course directory are
+    the usual cause and are nearly always obtainable elsewhere, so the fix is to
+    offer them up rather than refuse or silently prune. *members* is mutated to
+    match whatever is dropped; the caller rewrites the zip from it.
+    """
+    total = zip_path.stat().st_size
+    if total <= limit:
+        return []
+
+    print(f"Archive is {_format_size(total)}, over the {_format_size(limit)} limit.")
+    if keep_all:
+        print("  --keep-all given; including every file.")
+        return []
+    if not sys.stdin.isatty():
+        print("  Not running interactively; including every file.")
+        print("  Re-run in a terminal to choose what to leave out.")
+        return []
+
+    candidates = _size_candidates(_member_contributions(zip_path), limit)
+    if not candidates:
+        print("  No single file is large enough to help; including every file.")
+        return []
+
+    print("  The biggest files are listed first. Leaving one out is enough if")
+    print("  it brings the archive under the limit.")
+    dropped = _choose_drops(candidates, total, limit, _ask_to_drop)
+    if not dropped:
+        print("  Including every file; the archive is still over the limit.")
+        return []
+
+    for name in dropped:
+        del members[name]
+    return dropped
+
+
 def archive_course(
     dirname: str,
     output: str | None = None,
     export_html: bool = True,
     export_pdf: bool = True,
+    max_size: float = 10.0,
+    keep_all: bool = False,
 ) -> Path:
     """Create a zip archive of a course directory.
 
     Optionally exports notebooks to HTML and/or PDF first.
+
+    *max_size* is the size in MB above which the archive is too big to email
+    comfortably; exceeding it prompts to leave the largest files out. Pass 0 to
+    skip that check, or *keep_all* to report an oversized archive without being
+    asked anything.
     """
     course_path = Path(dirname)
     if not course_path.is_dir():
@@ -302,6 +354,15 @@ def archive_course(
     # Create zip file
     members = _archive_members(course_path)
     _write_zip(zip_path, members)
+
+    # The archive has to be small enough to email; offer to shed the big files
+    # if it isn't. Measuring the finished zip is what makes the offer honest.
+    dropped: list[str] = []
+    limit = int(max_size * 1024 * 1024)
+    if limit > 0:
+        dropped = _apply_size_guard(zip_path, members, limit, keep_all)
+        if dropped:
+            _write_zip(zip_path, members)
 
     # Gather info for summary
     with zipfile.ZipFile(zip_path, "r") as zf:

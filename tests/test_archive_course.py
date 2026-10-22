@@ -1,3 +1,4 @@
+import os
 import subprocess
 import zipfile
 from pathlib import Path
@@ -1282,3 +1283,167 @@ def test_ask_to_drop_keeps_file_when_stdin_closes(
     monkeypatch.setattr("builtins.input", closed)
 
     assert _ask_to_drop("c/data/big.csv", 8 * 1024 * 1024, 4 * 1024 * 1024) is False
+
+
+# ---------------------------------------------------------------------------
+# size guard: wired into archive_course
+# ---------------------------------------------------------------------------
+
+
+def _course_with_big_file(tmp_path: Path) -> Path:
+    """A course dir whose data file dwarfs its lesson, for size-guard tests."""
+    course_dir = tmp_path / "mycourse"
+    (course_dir / "data").mkdir(parents=True)
+    (course_dir / "lesson.txt").write_text("hello")
+    # Random bytes so deflate cannot shrink it away.
+    (course_dir / "data" / "big.csv").write_bytes(os.urandom(40_000))
+    return course_dir
+
+
+def test_archive_under_the_limit_says_nothing_about_size(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A normal archive never mentions the limit."""
+    course_dir = tmp_path / "mycourse"
+    course_dir.mkdir()
+    (course_dir / "lesson.txt").write_text("hello")
+
+    archive_course(
+        str(course_dir),
+        output=str(tmp_path / "c.zip"),
+        export_html=False,
+        export_pdf=False,
+    )
+
+    assert "over the" not in capsys.readouterr().out
+
+
+def test_archive_over_the_limit_without_a_terminal_keeps_everything(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Scripts and CI are never blocked on a question; they get a warning."""
+    course_dir = _course_with_big_file(tmp_path)
+    monkeypatch.setattr("sys.stdin.isatty", lambda: False)
+
+    zip_path = archive_course(
+        str(course_dir),
+        output=str(tmp_path / "c.zip"),
+        export_html=False,
+        export_pdf=False,
+        max_size=0.01,
+    )
+
+    out = capsys.readouterr().out
+    assert "over the" in out
+    assert "not running interactively" in out.lower()
+    with zipfile.ZipFile(zip_path) as zf:
+        assert "mycourse/data/big.csv" in zf.namelist()
+
+
+def test_archive_keep_all_reports_but_does_not_ask(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """--keep-all still flags an oversized archive, it just asks nothing."""
+    course_dir = _course_with_big_file(tmp_path)
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    monkeypatch.setattr("builtins.input", lambda _: pytest.fail("should not ask"))
+
+    zip_path = archive_course(
+        str(course_dir),
+        output=str(tmp_path / "c.zip"),
+        export_html=False,
+        export_pdf=False,
+        max_size=0.01,
+        keep_all=True,
+    )
+
+    out = capsys.readouterr().out
+    assert "over the" in out
+    assert "--keep-all" in out
+    with zipfile.ZipFile(zip_path) as zf:
+        assert "mycourse/data/big.csv" in zf.namelist()
+
+
+def test_archive_drops_the_file_when_asked_to(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Saying yes rewrites the archive without that file, and it really shrinks."""
+    course_dir = _course_with_big_file(tmp_path)
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    monkeypatch.setattr("builtins.input", lambda _: "y")
+
+    zip_path = archive_course(
+        str(course_dir),
+        output=str(tmp_path / "c.zip"),
+        export_html=False,
+        export_pdf=False,
+        max_size=0.01,
+    )
+
+    with zipfile.ZipFile(zip_path) as zf:
+        names = zf.namelist()
+    assert "mycourse/data/big.csv" not in names
+    assert "mycourse/lesson.txt" in names
+    assert zip_path.stat().st_size < 10 * 1024
+
+
+def test_archive_declining_keeps_the_file_and_warns(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Declining every offer leaves the archive intact and over the limit."""
+    course_dir = _course_with_big_file(tmp_path)
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    monkeypatch.setattr("builtins.input", lambda _: "n")
+
+    zip_path = archive_course(
+        str(course_dir),
+        output=str(tmp_path / "c.zip"),
+        export_html=False,
+        export_pdf=False,
+        max_size=0.01,
+    )
+
+    with zipfile.ZipFile(zip_path) as zf:
+        assert "mycourse/data/big.csv" in zf.namelist()
+    assert "still over the limit" in capsys.readouterr().out
+
+
+def test_archive_max_size_zero_disables_the_check(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """max_size=0 turns the guard off entirely."""
+    course_dir = _course_with_big_file(tmp_path)
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    monkeypatch.setattr("builtins.input", lambda _: pytest.fail("should not ask"))
+
+    archive_course(
+        str(course_dir),
+        output=str(tmp_path / "c.zip"),
+        export_html=False,
+        export_pdf=False,
+        max_size=0,
+    )
+
+    assert "over the" not in capsys.readouterr().out
+
+
+def test_archive_many_small_files_over_the_limit_offers_nothing(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """When no one file is big enough to help, dropping files is the wrong fix."""
+    course_dir = tmp_path / "mycourse"
+    course_dir.mkdir()
+    for i in range(150):
+        (course_dir / f"f{i}.bin").write_bytes(os.urandom(60))
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    monkeypatch.setattr("builtins.input", lambda _: pytest.fail("should not ask"))
+
+    archive_course(
+        str(course_dir),
+        output=str(tmp_path / "c.zip"),
+        export_html=False,
+        export_pdf=False,
+        max_size=0.01,
+    )
+
+    assert "no single file" in capsys.readouterr().out.lower()
