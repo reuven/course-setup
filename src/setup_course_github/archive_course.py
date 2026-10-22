@@ -154,6 +154,29 @@ def _member_contributions(zip_path: Path) -> dict[str, int]:
         return {info.filename: info.compress_size for info in zf.infolist()}
 
 
+# A candidate must contribute at least this fraction of the limit to be worth a
+# question. Without a floor, declining every offer would walk the whole course
+# directory one prompt at a time; and a file this small cannot close a real
+# overage anyway, so asking about it is noise rather than a choice.
+_CANDIDATE_FRACTION = 100
+
+
+def _size_candidates(
+    contributions: dict[str, int], limit: int
+) -> list[tuple[str, int]]:
+    """Rank the members worth offering to drop, largest contribution first.
+
+    Ties break on name so a given archive always asks in the same order. Only
+    the caller knows whether the archive is actually over *limit*; this just
+    says which members could move the needle if it is.
+    """
+    floor = max(1, limit // _CANDIDATE_FRACTION)
+    return sorted(
+        ((name, size) for name, size in contributions.items() if size >= floor),
+        key=lambda item: (-item[1], item[0]),
+    )
+
+
 def archive_course(
     dirname: str,
     output: str | None = None,

@@ -7,6 +7,7 @@ import pytest
 
 from setup_course_github.archive_course import (
     _member_contributions,
+    _size_candidates,
     archive_course,
     main,
 )
@@ -1046,3 +1047,56 @@ def test_member_contributions_measures_compressed_not_raw(tmp_path: Path) -> Non
     contributions = _member_contributions(zip_path)
 
     assert contributions["c/big.csv"] < len(raw) / 10
+
+
+# ---------------------------------------------------------------------------
+# size guard: ranking the candidates worth asking about
+# ---------------------------------------------------------------------------
+
+
+def test_size_candidates_ranks_largest_first() -> None:
+    """Candidates come back ordered by contribution, biggest first."""
+    contributions = {"a.csv": 300_000, "b.csv": 900_000, "c.csv": 600_000}
+
+    assert _size_candidates(contributions, 10 * 1024 * 1024) == [
+        ("b.csv", 900_000),
+        ("c.csv", 600_000),
+        ("a.csv", 300_000),
+    ]
+
+
+def test_size_candidates_breaks_ties_by_name() -> None:
+    """Equal contributions are ordered by name, so the walk is deterministic."""
+    contributions = {"z.csv": 500_000, "a.csv": 500_000, "m.csv": 500_000}
+
+    assert [name for name, _ in _size_candidates(contributions, 10 * 1024 * 1024)] == [
+        "a.csv",
+        "m.csv",
+        "z.csv",
+    ]
+
+
+def test_size_candidates_skips_files_too_small_to_help() -> None:
+    """A file under 1% of the limit cannot close an overage, so it is not offered."""
+    limit = 10 * 1024 * 1024
+    floor = limit // 100
+    contributions = {"big.csv": 5_000_000, "tiny.txt": floor - 1, "edge.txt": floor}
+
+    assert _size_candidates(contributions, limit) == [
+        ("big.csv", 5_000_000),
+        ("edge.txt", floor),
+    ]
+
+
+def test_size_candidates_empty_when_nothing_is_big_enough() -> None:
+    """Many small files yield no candidates -- dropping files is the wrong fix."""
+    contributions = {f"f{i}.txt": 100 for i in range(50)}
+
+    assert _size_candidates(contributions, 10 * 1024 * 1024) == []
+
+
+def test_size_candidates_floor_is_at_least_one_byte() -> None:
+    """A tiny limit must not make the floor zero and admit empty files."""
+    contributions = {"empty.txt": 0, "some.txt": 1}
+
+    assert _size_candidates(contributions, 10) == [("some.txt", 1)]
