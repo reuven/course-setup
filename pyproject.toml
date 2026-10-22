@@ -53,8 +53,11 @@ dev = [
 [tool.ruff]
   line-length = 88
   target-version = "py313"
-  # docs/ holds point-in-time planning artifacts; don't lint/format their code snippets
-  extend-exclude = ["docs"]
+  # docs/ holds point-in-time planning artifacts; don't lint/format their code
+  # snippets. CLAUDE.md is instructions, not shipped code: its pandas example
+  # deliberately shows one method call per line, which the formatter would
+  # collapse, and it has to stay identical to the global copy ruff never sees.
+  extend-exclude = ["docs", "CLAUDE.md"]
 
 [tool.ruff.lint]
   select = ["E", "F", "I", "B", "UP"]
