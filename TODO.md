@@ -50,7 +50,7 @@ as soon as the archive is under the limit.
 - [x] 9. `ruff format`, `ruff check`, `mypy --strict`, full suite at 100% coverage
 - [x] 10. `mutmut run` as a pre-merge audit; close real logic gaps
 - [x] 11. Update README.md and MANUAL.md
-- [ ] 12. Bump version 3.3.1 → 3.4.0, tag `v3.4.0`, merge to main, delete branch, push
+- [x] 12. Bump version 3.3.1 → 3.4.0, tag `v3.4.0`, merge to main, delete branch, push
 
 ## Changed along the way
 
@@ -79,7 +79,7 @@ either way, and invalid under mypy --strict), and `limit > 0` -> `limit > 1`,
 which differs only at a one-byte limit. The rest are string literals in output
 and help text, plus the pre-existing PDF-export baseline.
 
-## Open question
+## Released
 
-Task 12 assumes a minor bump (new user-visible feature). Say if you'd rather
-this ride along to a later release instead.
+3.4.0, approved as a minor bump since the size guard is a new user-visible
+feature with two new flags.
