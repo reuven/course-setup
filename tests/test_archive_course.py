@@ -1,3 +1,4 @@
+import inspect
 import os
 import subprocess
 import zipfile
@@ -7,11 +8,14 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from setup_course_github.archive_course import (
+    _apply_size_guard,
+    _archive_members,
     _ask_to_drop,
     _choose_drops,
     _format_size,
     _member_contributions,
     _size_candidates,
+    _write_zip,
     archive_course,
     main,
 )
@@ -1576,3 +1580,93 @@ def test_choose_drops_still_asks_when_candidates_can_combine(tmp_path: Path) -> 
 
     assert dropped == ["a.csv", "b.csv"]
     assert asked == ["huge.csv", "a.csv", "b.csv"]
+
+
+# ---------------------------------------------------------------------------
+# size guard: boundaries and units
+# ---------------------------------------------------------------------------
+
+
+def test_choose_drops_treats_the_limit_itself_as_acceptable() -> None:
+    """An archive sitting exactly on the limit is fine, not one byte too big."""
+
+    def ask(name: str, size: int, projected: int) -> bool:  # pragma: no cover
+        raise AssertionError("an archive exactly at the limit must not be questioned")
+
+    assert (
+        _choose_drops(
+            [("a.csv", 2_000_000)], total=10_000_000, limit=10_000_000, ask=ask
+        )
+        == []
+    )
+
+
+def test_apply_size_guard_accepts_an_archive_exactly_at_the_limit(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A zip whose size equals the limit passes silently."""
+    course_dir = _course_with_big_file(tmp_path)
+    members = _archive_members(course_dir)
+    zip_path = tmp_path / "c.zip"
+    _write_zip(zip_path, members)
+
+    dropped = _apply_size_guard(
+        zip_path, members, limit=zip_path.stat().st_size, keep_all=False
+    )
+
+    assert dropped == []
+    assert capsys.readouterr().out == ""
+
+
+def test_apply_size_guard_catches_an_archive_one_byte_over(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """One byte over the limit is over the limit."""
+    course_dir = _course_with_big_file(tmp_path)
+    members = _archive_members(course_dir)
+    zip_path = tmp_path / "c.zip"
+    _write_zip(zip_path, members)
+    monkeypatch.setattr("sys.stdin.isatty", lambda: False)
+
+    _apply_size_guard(
+        zip_path, members, limit=zip_path.stat().st_size - 1, keep_all=False
+    )
+
+    assert "over the" in capsys.readouterr().out
+
+
+def test_format_size_counts_a_megabyte_as_1024_squared_bytes() -> None:
+    """Sizes are in MiB, matching how every file manager reports them."""
+    assert _format_size(100 * 1024 * 1024) == "100.0 MB"
+    assert _format_size(100 * 1024) == "100.0 KB"
+
+
+def test_archive_max_size_is_in_mebibytes(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """--max-size 1 means 1 MiB: an archive of 1,020,000 bytes is under it.
+
+    Were the limit read as 1,000,000 bytes this archive would be over it, so
+    this pins the unit the documentation promises.
+    """
+    course_dir = tmp_path / "mycourse"
+    course_dir.mkdir()
+    (course_dir / "data.bin").write_bytes(os.urandom(1_020_000))
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    monkeypatch.setattr("builtins.input", lambda _: pytest.fail("should not ask"))
+
+    zip_path = archive_course(
+        str(course_dir),
+        output=str(tmp_path / "c.zip"),
+        export_html=False,
+        export_pdf=False,
+        max_size=1,
+    )
+
+    assert 1_000_000 < zip_path.stat().st_size < 1024 * 1024
+    assert "over the" not in capsys.readouterr().out
+
+
+def test_archive_defaults_to_a_ten_megabyte_ceiling() -> None:
+    """The documented default lives in three places; pin the one in the API."""
+    assert inspect.signature(archive_course).parameters["max_size"].default == 10.0

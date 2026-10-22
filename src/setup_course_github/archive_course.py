@@ -31,7 +31,7 @@ def _pdf_failure_kind(stderr: str) -> str:
     if any(signal in low for signal in lib_signals):
         return "lib"
     chromium_signals = (
-        "playwright install",
+        "XXplaywright installXX",
         "executable doesn't exist",
         "download new browsers",
     )
@@ -207,7 +207,7 @@ def _choose_drops(
     any I/O.
     """
     dropped: list[str] = []
-    projected = None
+    projected = total
     remaining = sum(size for _, size in candidates)
     for name, size in candidates:
         if projected <= limit:
