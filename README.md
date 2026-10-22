@@ -183,6 +183,8 @@ archive-course ./Acme-python-intro-2026-03
 | `--output`, `-o` | Custom output zip path (defaults to `{dirname}.zip`) |
 | `--no-html` | Skip HTML export of Jupyter notebooks |
 | `--no-pdf` | Skip PDF export of Jupyter notebooks |
+| `--max-size MB` | Prompt to leave out the largest files above this size (default `10`; `0` disables) |
+| `--keep-all` | Include every file without prompting, even if the archive is oversized |
 
 This archives **all files** in the course directory (`.py`, `.csv`, `.toml`,
 notebooks, etc.), excluding `.git`, `.venv`, `__pycache__`, and
@@ -205,6 +207,20 @@ a concise hint (not a traceback) and skips PDF — the rest of the archive
 creating the archive, a summary is printed listing the archive path, file
 count, size, notebooks (shown as `notebook.ipynb + notebook.html +
 notebook.pdf`), export counts, and all other included files.
+
+**Keeping the archive small enough to email.** Course archives usually go to
+the client as a mail attachment, and a dataset left in the course directory
+can quietly push it past what mail will carry. If the finished zip exceeds
+`--max-size` (10 MB by default), `archive-course` lists the biggest files —
+largest first — and asks about each until the archive is under the limit, so
+one oversized dataset costs one question. The sizes it quotes are the files'
+**compressed** sizes read back from the archive itself, not their size on
+disk: a 19 MB CSV that deflates to 4.5 MB is reported as 4.5 MB, because
+that is what it actually costs you. Anything but an explicit `y` keeps the
+file, and whatever you leave out is named in the summary under
+`Left out (too big to email):`. The prompt only appears on a terminal —
+scripts, CI, and piped runs keep every file and print a warning instead —
+and `--keep-all` or `--max-size 0` turn the questions off.
 
 ### `list-courses` — List active and archived courses
 

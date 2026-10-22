@@ -1,3 +1,5 @@
+import inspect
+import os
 import subprocess
 import zipfile
 from pathlib import Path
@@ -5,7 +7,19 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from setup_course_github.archive_course import archive_course, main
+from setup_course_github.archive_course import (
+    _apply_size_guard,
+    _archive_members,
+    _ask_to_drop,
+    _choose_drops,
+    _format_size,
+    _megabytes_to_bytes,
+    _member_contributions,
+    _size_candidates,
+    _write_zip,
+    archive_course,
+    main,
+)
 
 # ---------------------------------------------------------------------------
 # archive_course function tests
@@ -217,6 +231,8 @@ def test_main_calls_archive_course(tmp_path: Path) -> None:
         output=None,
         export_html=True,
         export_pdf=True,
+        max_size=10.0,
+        keep_all=False,
     )
 
 
@@ -891,7 +907,12 @@ def test_archive_main_passes_no_pdf(tmp_path: Path) -> None:
         with patch("sys.argv", ["archive-course", "--no-pdf", str(course)]):
             main()
     mock_archive.assert_called_once_with(
-        dirname=str(course), output=None, export_html=True, export_pdf=False
+        dirname=str(course),
+        output=None,
+        export_html=True,
+        export_pdf=False,
+        max_size=10.0,
+        keep_all=False,
     )
 
 
@@ -1010,3 +1031,651 @@ def test_pdf_failure_kind_other_and_priority() -> None:
         _pdf_failure_kind("No module named 'playwright'; try playwright install")
         == "lib"
     )
+
+
+# ---------------------------------------------------------------------------
+# size guard: measuring each member's contribution
+# ---------------------------------------------------------------------------
+
+
+def test_member_contributions_reports_compressed_sizes(tmp_path: Path) -> None:
+    """Each member maps to its compressed size as stored in the zip."""
+    zip_path = tmp_path / "a.zip"
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("c/small.txt", "x")
+        zf.writestr("c/big.csv", "a,b,c\n" * 20000)
+
+    contributions = _member_contributions(zip_path)
+
+    assert set(contributions) == {"c/small.txt", "c/big.csv"}
+    with zipfile.ZipFile(zip_path) as zf:
+        for info in zf.infolist():
+            assert contributions[info.filename] == info.compress_size
+
+
+def test_member_contributions_measures_compressed_not_raw(tmp_path: Path) -> None:
+    """A highly compressible member contributes far less than its raw size."""
+    raw = "a,b,c\n" * 50000
+    zip_path = tmp_path / "a.zip"
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("c/big.csv", raw)
+
+    contributions = _member_contributions(zip_path)
+
+    assert contributions["c/big.csv"] < len(raw) / 10
+
+
+# ---------------------------------------------------------------------------
+# size guard: ranking the candidates worth asking about
+# ---------------------------------------------------------------------------
+
+
+def test_size_candidates_ranks_largest_first() -> None:
+    """Candidates come back ordered by contribution, biggest first."""
+    contributions = {"a.csv": 300_000, "b.csv": 900_000, "c.csv": 600_000}
+
+    assert _size_candidates(contributions, 10 * 1024 * 1024) == [
+        ("b.csv", 900_000),
+        ("c.csv", 600_000),
+        ("a.csv", 300_000),
+    ]
+
+
+def test_size_candidates_breaks_ties_by_name() -> None:
+    """Equal contributions are ordered by name, so the walk is deterministic."""
+    contributions = {"z.csv": 500_000, "a.csv": 500_000, "m.csv": 500_000}
+
+    assert [name for name, _ in _size_candidates(contributions, 10 * 1024 * 1024)] == [
+        "a.csv",
+        "m.csv",
+        "z.csv",
+    ]
+
+
+def test_size_candidates_skips_files_too_small_to_help() -> None:
+    """A file under 1% of the limit cannot close an overage, so it is not offered."""
+    limit = 10 * 1024 * 1024
+    floor = limit // 100
+    contributions = {"big.csv": 5_000_000, "tiny.txt": floor - 1, "edge.txt": floor}
+
+    assert _size_candidates(contributions, limit) == [
+        ("big.csv", 5_000_000),
+        ("edge.txt", floor),
+    ]
+
+
+def test_size_candidates_empty_when_nothing_is_big_enough() -> None:
+    """Many small files yield no candidates -- dropping files is the wrong fix."""
+    contributions = {f"f{i}.txt": 100 for i in range(50)}
+
+    assert _size_candidates(contributions, 10 * 1024 * 1024) == []
+
+
+def test_size_candidates_floor_is_at_least_one_byte() -> None:
+    """A tiny limit must not make the floor zero and admit empty files."""
+    contributions = {"empty.txt": 0, "some.txt": 1}
+
+    assert _size_candidates(contributions, 10) == [("some.txt", 1)]
+
+
+# ---------------------------------------------------------------------------
+# size guard: human-readable sizes
+# ---------------------------------------------------------------------------
+
+
+def test_format_size_uses_kb_below_one_megabyte() -> None:
+    """Sub-megabyte sizes read in KB with one decimal."""
+    assert _format_size(1536) == "1.5 KB"
+    assert _format_size(1024 * 1024 - 1) == "1024.0 KB"
+
+
+def test_format_size_uses_mb_from_one_megabyte_up() -> None:
+    """A full megabyte and above reads in MB."""
+    assert _format_size(1024 * 1024) == "1.0 MB"
+    assert _format_size(3 * 1024 * 1024 + 512 * 1024) == "3.5 MB"
+
+
+# ---------------------------------------------------------------------------
+# size guard: walking the candidates
+# ---------------------------------------------------------------------------
+
+
+def test_choose_drops_stops_as_soon_as_under_the_limit() -> None:
+    """One oversized file is one question, even with other candidates behind it."""
+    asked: list[str] = []
+
+    def ask(name: str, size: int, projected: int) -> bool:
+        asked.append(name)
+        return True
+
+    dropped = _choose_drops(
+        [("huge.csv", 8_000_000), ("big.csv", 2_000_000), ("mid.csv", 1_000_000)],
+        total=12_000_000,
+        limit=10_000_000,
+        ask=ask,
+    )
+
+    assert dropped == ["huge.csv"]
+    assert asked == ["huge.csv"]
+
+
+def test_choose_drops_moves_on_when_a_file_is_kept() -> None:
+    """Declining the biggest file offers the next one instead."""
+
+    def ask(name: str, size: int, projected: int) -> bool:
+        return name != "huge.csv"
+
+    dropped = _choose_drops(
+        [("huge.csv", 8_000_000), ("big.csv", 3_000_000), ("mid.csv", 1_000_000)],
+        total=12_000_000,
+        limit=10_000_000,
+        ask=ask,
+    )
+
+    assert dropped == ["big.csv"]
+
+
+def test_choose_drops_keeps_asking_until_the_overage_is_closed() -> None:
+    """Several medium files can add up to the needed saving."""
+
+    def ask(name: str, size: int, projected: int) -> bool:
+        return True
+
+    dropped = _choose_drops(
+        [("a.csv", 2_000_000), ("b.csv", 2_000_000), ("c.csv", 2_000_000)],
+        total=13_000_000,
+        limit=10_000_000,
+        ask=ask,
+    )
+
+    assert dropped == ["a.csv", "b.csv"]
+
+
+def test_choose_drops_returns_nothing_when_everything_is_kept() -> None:
+    """Declining every candidate drops nothing and still terminates."""
+    asked: list[str] = []
+
+    def ask(name: str, size: int, projected: int) -> bool:
+        asked.append(name)
+        return False
+
+    dropped = _choose_drops(
+        [("a.csv", 2_000_000), ("b.csv", 2_000_000)],
+        total=11_000_000,
+        limit=10_000_000,
+        ask=ask,
+    )
+
+    assert dropped == []
+    assert asked == ["a.csv", "b.csv"]
+
+
+def test_choose_drops_asks_nothing_when_already_under_the_limit() -> None:
+    """A small archive is never questioned, however many candidates it has."""
+
+    def ask(name: str, size: int, projected: int) -> bool:  # pragma: no cover
+        raise AssertionError("should not ask about an archive already under the limit")
+
+    assert (
+        _choose_drops(
+            [("a.csv", 2_000_000)], total=5_000_000, limit=10_000_000, ask=ask
+        )
+        == []
+    )
+
+
+def test_choose_drops_reports_the_projected_size_after_each_drop() -> None:
+    """The question carries the size the archive would become, so the effect shows."""
+    seen: list[tuple[str, int, int]] = []
+
+    def ask(name: str, size: int, projected: int) -> bool:
+        seen.append((name, size, projected))
+        return False
+
+    _choose_drops(
+        [("a.csv", 2_000_000), ("b.csv", 1_000_000)],
+        total=11_000_000,
+        limit=10_000_000,
+        ask=ask,
+    )
+
+    assert seen == [
+        ("a.csv", 2_000_000, 9_000_000),
+        ("b.csv", 1_000_000, 10_000_000),
+    ]
+
+
+# ---------------------------------------------------------------------------
+# size guard: the interactive question
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("answer", ["y", "Y", "yes", " y "])
+def test_ask_to_drop_accepts_yes(
+    answer: str, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """An explicit yes drops the file."""
+    monkeypatch.setattr("builtins.input", lambda _: answer)
+
+    assert _ask_to_drop("c/data/big.csv", 8 * 1024 * 1024, 4 * 1024 * 1024) is True
+
+
+@pytest.mark.parametrize("answer", ["", "n", "no", "maybe", "q"])
+def test_ask_to_drop_keeps_on_anything_else(
+    answer: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Keeping the file is the default: only an explicit yes drops it."""
+    monkeypatch.setattr("builtins.input", lambda _: answer)
+
+    assert _ask_to_drop("c/data/big.csv", 8 * 1024 * 1024, 4 * 1024 * 1024) is False
+
+
+def test_ask_to_drop_shows_size_and_projected_total(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The question names the file, its weight, and the resulting archive size."""
+    monkeypatch.setattr("builtins.input", lambda _: "n")
+
+    _ask_to_drop("c/data/big.csv", 8 * 1024 * 1024, 4 * 1024 * 1024)
+
+    out = capsys.readouterr().out
+    assert "c/data/big.csv" in out
+    assert "8.0 MB" in out
+    assert "4.0 MB" in out
+
+
+def test_ask_to_drop_keeps_file_when_stdin_closes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A closed stdin must not crash the archive; the file is kept."""
+
+    def closed(_: str) -> str:
+        raise EOFError
+
+    monkeypatch.setattr("builtins.input", closed)
+
+    assert _ask_to_drop("c/data/big.csv", 8 * 1024 * 1024, 4 * 1024 * 1024) is False
+
+
+# ---------------------------------------------------------------------------
+# size guard: wired into archive_course
+# ---------------------------------------------------------------------------
+
+
+def _course_with_big_file(tmp_path: Path) -> Path:
+    """A course dir whose data file dwarfs its lesson, for size-guard tests."""
+    course_dir = tmp_path / "mycourse"
+    (course_dir / "data").mkdir(parents=True)
+    (course_dir / "lesson.txt").write_text("hello")
+    # Random bytes so deflate cannot shrink it away.
+    (course_dir / "data" / "big.csv").write_bytes(os.urandom(40_000))
+    return course_dir
+
+
+def test_archive_under_the_limit_says_nothing_about_size(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A normal archive never mentions the limit."""
+    course_dir = tmp_path / "mycourse"
+    course_dir.mkdir()
+    (course_dir / "lesson.txt").write_text("hello")
+
+    archive_course(
+        str(course_dir),
+        output=str(tmp_path / "c.zip"),
+        export_html=False,
+        export_pdf=False,
+    )
+
+    assert "over the" not in capsys.readouterr().out
+
+
+def test_archive_over_the_limit_without_a_terminal_keeps_everything(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Scripts and CI are never blocked on a question; they get a warning."""
+    course_dir = _course_with_big_file(tmp_path)
+    monkeypatch.setattr("sys.stdin.isatty", lambda: False)
+
+    zip_path = archive_course(
+        str(course_dir),
+        output=str(tmp_path / "c.zip"),
+        export_html=False,
+        export_pdf=False,
+        max_size=0.01,
+    )
+
+    out = capsys.readouterr().out
+    assert "over the" in out
+    assert "not running interactively" in out.lower()
+    with zipfile.ZipFile(zip_path) as zf:
+        assert "mycourse/data/big.csv" in zf.namelist()
+
+
+def test_archive_keep_all_reports_but_does_not_ask(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """--keep-all still flags an oversized archive, it just asks nothing."""
+    course_dir = _course_with_big_file(tmp_path)
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    monkeypatch.setattr("builtins.input", lambda _: pytest.fail("should not ask"))
+
+    zip_path = archive_course(
+        str(course_dir),
+        output=str(tmp_path / "c.zip"),
+        export_html=False,
+        export_pdf=False,
+        max_size=0.01,
+        keep_all=True,
+    )
+
+    out = capsys.readouterr().out
+    assert "over the" in out
+    assert "--keep-all" in out
+    with zipfile.ZipFile(zip_path) as zf:
+        assert "mycourse/data/big.csv" in zf.namelist()
+
+
+def test_archive_drops_the_file_when_asked_to(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Saying yes rewrites the archive without that file, and it really shrinks."""
+    course_dir = _course_with_big_file(tmp_path)
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    monkeypatch.setattr("builtins.input", lambda _: "y")
+
+    zip_path = archive_course(
+        str(course_dir),
+        output=str(tmp_path / "c.zip"),
+        export_html=False,
+        export_pdf=False,
+        max_size=0.01,
+    )
+
+    with zipfile.ZipFile(zip_path) as zf:
+        names = zf.namelist()
+    assert "mycourse/data/big.csv" not in names
+    assert "mycourse/lesson.txt" in names
+    assert zip_path.stat().st_size < 10 * 1024
+
+
+def test_archive_declining_keeps_the_file_and_warns(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Declining every offer leaves the archive intact and over the limit."""
+    course_dir = _course_with_big_file(tmp_path)
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    monkeypatch.setattr("builtins.input", lambda _: "n")
+
+    zip_path = archive_course(
+        str(course_dir),
+        output=str(tmp_path / "c.zip"),
+        export_html=False,
+        export_pdf=False,
+        max_size=0.01,
+    )
+
+    with zipfile.ZipFile(zip_path) as zf:
+        assert "mycourse/data/big.csv" in zf.namelist()
+    assert "still over the limit" in capsys.readouterr().out
+
+
+def test_archive_max_size_zero_disables_the_check(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """max_size=0 turns the guard off entirely."""
+    course_dir = _course_with_big_file(tmp_path)
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    monkeypatch.setattr("builtins.input", lambda _: pytest.fail("should not ask"))
+
+    archive_course(
+        str(course_dir),
+        output=str(tmp_path / "c.zip"),
+        export_html=False,
+        export_pdf=False,
+        max_size=0,
+    )
+
+    assert "over the" not in capsys.readouterr().out
+
+
+def test_archive_many_small_files_over_the_limit_offers_nothing(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """When no one file is big enough to help, dropping files is the wrong fix."""
+    course_dir = tmp_path / "mycourse"
+    course_dir.mkdir()
+    for i in range(150):
+        (course_dir / f"f{i}.bin").write_bytes(os.urandom(60))
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    monkeypatch.setattr("builtins.input", lambda _: pytest.fail("should not ask"))
+
+    archive_course(
+        str(course_dir),
+        output=str(tmp_path / "c.zip"),
+        export_html=False,
+        export_pdf=False,
+        max_size=0.01,
+    )
+
+    assert "no single file" in capsys.readouterr().out.lower()
+
+
+def test_main_passes_max_size(tmp_path: Path) -> None:
+    """--max-size overrides the default mail-friendly ceiling."""
+    course_dir = tmp_path / "mycourse"
+    course_dir.mkdir()
+
+    with patch("setup_course_github.archive_course.archive_course") as mock_archive:
+        with patch("sys.argv", ["archive-course", str(course_dir), "--max-size", "25"]):
+            main()
+
+    assert mock_archive.call_args.kwargs["max_size"] == 25.0
+
+
+def test_main_max_size_zero_passes_through(tmp_path: Path) -> None:
+    """--max-size 0 reaches archive_course as the off switch."""
+    course_dir = tmp_path / "mycourse"
+    course_dir.mkdir()
+
+    with patch("setup_course_github.archive_course.archive_course") as mock_archive:
+        with patch("sys.argv", ["archive-course", str(course_dir), "--max-size", "0"]):
+            main()
+
+    assert mock_archive.call_args.kwargs["max_size"] == 0.0
+
+
+def test_main_passes_keep_all(tmp_path: Path) -> None:
+    """--keep-all reaches archive_course."""
+    course_dir = tmp_path / "mycourse"
+    course_dir.mkdir()
+
+    with patch("setup_course_github.archive_course.archive_course") as mock_archive:
+        with patch("sys.argv", ["archive-course", str(course_dir), "--keep-all"]):
+            main()
+
+    assert mock_archive.call_args.kwargs["keep_all"] is True
+
+
+# ---------------------------------------------------------------------------
+# size guard: reporting what was left out
+# ---------------------------------------------------------------------------
+
+
+def test_archive_summary_names_the_files_left_out(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The summary records every omission, so nothing vanishes quietly."""
+    course_dir = _course_with_big_file(tmp_path)
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    monkeypatch.setattr("builtins.input", lambda _: "y")
+
+    archive_course(
+        str(course_dir),
+        output=str(tmp_path / "c.zip"),
+        export_html=False,
+        export_pdf=False,
+        max_size=0.01,
+    )
+
+    out = capsys.readouterr().out
+    assert "Left out (too big to email):" in out
+    assert "mycourse/data/big.csv" in out.split("Left out (too big to email):")[1]
+
+
+def test_archive_summary_omits_the_section_when_nothing_was_dropped(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A normal archive has no omissions section."""
+    course_dir = tmp_path / "mycourse"
+    course_dir.mkdir()
+    (course_dir / "lesson.txt").write_text("hello")
+
+    archive_course(
+        str(course_dir),
+        output=str(tmp_path / "c.zip"),
+        export_html=False,
+        export_pdf=False,
+    )
+
+    assert "Left out" not in capsys.readouterr().out
+
+
+def test_choose_drops_stops_when_no_combination_can_help(tmp_path: Path) -> None:
+    """Once the remaining candidates cannot close the gap, stop asking.
+
+    Declining the one big file leaves questions that are arithmetically
+    pointless -- dropping everything still left would not get under the limit.
+    """
+    asked: list[str] = []
+
+    def ask(name: str, size: int, projected: int) -> bool:
+        asked.append(name)
+        return False
+
+    dropped = _choose_drops(
+        [("huge.csv", 4_500_000), ("small.csv", 76_000), ("tiny.csv", 40_000)],
+        total=4_600_000,
+        limit=3_000_000,
+        ask=ask,
+    )
+
+    assert dropped == []
+    assert asked == ["huge.csv"]
+
+
+def test_choose_drops_still_asks_when_candidates_can_combine(tmp_path: Path) -> None:
+    """Several files that together close the gap are all still worth offering."""
+    asked: list[str] = []
+
+    def ask(name: str, size: int, projected: int) -> bool:
+        asked.append(name)
+        return name != "huge.csv"
+
+    dropped = _choose_drops(
+        [("huge.csv", 4_000_000), ("a.csv", 900_000), ("b.csv", 900_000)],
+        total=4_600_000,
+        limit=3_000_000,
+        ask=ask,
+    )
+
+    assert dropped == ["a.csv", "b.csv"]
+    assert asked == ["huge.csv", "a.csv", "b.csv"]
+
+
+# ---------------------------------------------------------------------------
+# size guard: boundaries and units
+# ---------------------------------------------------------------------------
+
+
+def test_choose_drops_treats_the_limit_itself_as_acceptable() -> None:
+    """An archive sitting exactly on the limit is fine, not one byte too big."""
+
+    def ask(name: str, size: int, projected: int) -> bool:  # pragma: no cover
+        raise AssertionError("an archive exactly at the limit must not be questioned")
+
+    assert (
+        _choose_drops(
+            [("a.csv", 2_000_000)], total=10_000_000, limit=10_000_000, ask=ask
+        )
+        == []
+    )
+
+
+def test_apply_size_guard_accepts_an_archive_exactly_at_the_limit(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A zip whose size equals the limit passes silently."""
+    course_dir = _course_with_big_file(tmp_path)
+    members = _archive_members(course_dir)
+    zip_path = tmp_path / "c.zip"
+    _write_zip(zip_path, members)
+
+    dropped = _apply_size_guard(
+        zip_path, members, limit=zip_path.stat().st_size, keep_all=False
+    )
+
+    assert dropped == []
+    assert capsys.readouterr().out == ""
+
+
+def test_apply_size_guard_catches_an_archive_one_byte_over(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """One byte over the limit is over the limit."""
+    course_dir = _course_with_big_file(tmp_path)
+    members = _archive_members(course_dir)
+    zip_path = tmp_path / "c.zip"
+    _write_zip(zip_path, members)
+    monkeypatch.setattr("sys.stdin.isatty", lambda: False)
+
+    _apply_size_guard(
+        zip_path, members, limit=zip_path.stat().st_size - 1, keep_all=False
+    )
+
+    assert "over the" in capsys.readouterr().out
+
+
+def test_format_size_counts_a_megabyte_as_1024_squared_bytes() -> None:
+    """Sizes are in MiB, matching how every file manager reports them."""
+    assert _format_size(100 * 1024 * 1024) == "100.0 MB"
+    assert _format_size(100 * 1024) == "100.0 KB"
+
+
+def test_archive_max_size_is_in_mebibytes(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """--max-size 1 means 1 MiB: an archive of 1,020,000 bytes is under it.
+
+    Were the limit read as 1,000,000 bytes this archive would be over it, so
+    this pins the unit the documentation promises.
+    """
+    course_dir = tmp_path / "mycourse"
+    course_dir.mkdir()
+    (course_dir / "data.bin").write_bytes(os.urandom(1_020_000))
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    monkeypatch.setattr("builtins.input", lambda _: pytest.fail("should not ask"))
+
+    zip_path = archive_course(
+        str(course_dir),
+        output=str(tmp_path / "c.zip"),
+        export_html=False,
+        export_pdf=False,
+        max_size=1,
+    )
+
+    assert 1_000_000 < zip_path.stat().st_size < 1024 * 1024
+    assert "over the" not in capsys.readouterr().out
+
+
+def test_archive_defaults_to_a_ten_megabyte_ceiling() -> None:
+    """The documented default lives in three places; pin the one in the API."""
+    assert inspect.signature(archive_course).parameters["max_size"].default == 10.0
+
+
+def test_megabytes_to_bytes_uses_binary_megabytes() -> None:
+    """One MB is 1024*1024 bytes, the unit file managers and mail clients show."""
+    assert _megabytes_to_bytes(1) == 1_048_576
+    assert _megabytes_to_bytes(10) == 10_485_760
+    assert _megabytes_to_bytes(7.5) == 7_864_320
+    assert _megabytes_to_bytes(0) == 0

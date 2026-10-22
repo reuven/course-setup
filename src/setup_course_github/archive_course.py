@@ -2,7 +2,9 @@
 
 import argparse
 import subprocess
+import sys
 import zipfile
+from collections.abc import Callable
 from pathlib import Path
 
 from setup_course_github import __author__, __email__, __version__
@@ -141,15 +143,199 @@ def _export_notebooks_to_pdf(notebooks: list[Path], course_path: Path) -> int:
     return exported
 
 
+def _megabytes_to_bytes(megabytes: float) -> int:
+    """Convert a size in MB to bytes, treating MB as 1024*1024.
+
+    Named rather than inline because the unit is a promise to the user: mail
+    clients and file managers report binary megabytes, so --max-size 10 has to
+    mean the same 10 MB they will see.
+    """
+    return int(megabytes * 1024 * 1024)
+
+
+def _format_size(num_bytes: int) -> str:
+    """Render a byte count the way the archive summary and prompts both want it.
+
+    Shared so that the size a prompt quotes for a file and the size the summary
+    quotes for the archive are always in the same units and precision.
+    """
+    if num_bytes < 1024 * 1024:
+        return f"{num_bytes / 1024:.1f} KB"
+    return f"{num_bytes / (1024 * 1024):.1f} MB"
+
+
+def _member_contributions(zip_path: Path) -> dict[str, int]:
+    """Map each member of *zip_path* to the bytes it contributes to the archive.
+
+    ZIP deflates every member independently -- there is no solid or cross-file
+    compression -- so a member's stored compressed size is what it costs in the
+    finished file, give or take the ~100 bytes of local and central directory
+    header that go with it. That is why the size guard measures the built
+    archive: raw file sizes would flag text that compresses four-to-one and was
+    never a problem.
+    """
+    with zipfile.ZipFile(zip_path) as zf:
+        return {info.filename: info.compress_size for info in zf.infolist()}
+
+
+# A candidate must contribute at least this fraction of the limit to be worth a
+# question. Without a floor, declining every offer would walk the whole course
+# directory one prompt at a time; and a file this small cannot close a real
+# overage anyway, so asking about it is noise rather than a choice.
+_CANDIDATE_FRACTION = 100
+
+
+def _size_candidates(
+    contributions: dict[str, int], limit: int
+) -> list[tuple[str, int]]:
+    """Rank the members worth offering to drop, largest contribution first.
+
+    Ties break on name so a given archive always asks in the same order. Only
+    the caller knows whether the archive is actually over *limit*; this just
+    says which members could move the needle if it is.
+    """
+    floor = max(1, limit // _CANDIDATE_FRACTION)
+    return sorted(
+        ((name, size) for name, size in contributions.items() if size >= floor),
+        key=lambda item: (-item[1], item[0]),
+    )
+
+
+def _choose_drops(
+    candidates: list[tuple[str, int]],
+    total: int,
+    limit: int,
+    ask: Callable[[str, int, int], bool],
+) -> list[str]:
+    """Offer candidates largest-first until the archive would fit under *limit*.
+
+    The goal is a sendable archive, not a clean sweep, so the walk stops the
+    moment the projected size is under the limit -- one oversized dataset costs
+    one question. Keeping a file simply moves the offer to the next candidate.
+    *ask* receives the member's name, what it contributes, and what the archive
+    would weigh without it; it is injected so the decision logic stays free of
+    any I/O.
+    """
+    dropped: list[str] = []
+    projected = total
+    remaining = sum(size for _, size in candidates)
+    for name, size in candidates:
+        if projected <= limit:
+            break
+        # Asking about a file that cannot close the gap even with every other
+        # candidate behind it is a question with no useful answer.
+        if projected - remaining > limit:
+            break
+        if ask(name, size, projected - size):
+            dropped.append(name)
+            projected -= size
+        remaining -= size
+    return dropped
+
+
+def _ask_to_drop(name: str, size: int, projected: int) -> bool:
+    """Ask on the terminal whether to leave *name* out of the archive.
+
+    Quoting the projected archive size makes the consequence of each answer
+    visible. Keeping the file is the default for anything but an explicit yes,
+    including a closed stdin -- a surprise omission from a course archive is
+    worse than an archive that turns out to be too big to mail.
+    """
+    print(f"  {name} — {_format_size(size)}")
+    print(f"    Archive would be {_format_size(projected)} without it.")
+    try:
+        answer = input("    Leave it out? [y/N] ")
+    except EOFError:
+        return False
+    return answer.strip().lower() in {"y", "yes"}
+
+
+def _archive_members(course_path: Path) -> dict[str, Path]:
+    """Map every archive member name to the file on disk it comes from.
+
+    Naming the members up front, rather than writing them as the directory is
+    walked, is what lets the size guard leave one out: the keys here are the
+    same names zipfile reports sizes for, so dropping a file is a dict
+    deletion and a rewrite.
+    """
+    # Directories to exclude from the zip
+    exclude_dirs = {".git", ".venv", "__pycache__", ".ipynb_checkpoints"}
+    parent = course_path.parent
+    return {
+        file_path.relative_to(parent).as_posix(): file_path
+        for file_path in sorted(course_path.rglob("*"))
+        if file_path.is_file()
+        and not (set(file_path.relative_to(course_path).parts) & exclude_dirs)
+    }
+
+
+def _write_zip(zip_path: Path, members: dict[str, Path]) -> None:
+    """Write *members* to *zip_path*, replacing anything already there."""
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        for arcname, file_path in members.items():
+            zf.write(file_path, arcname)
+
+
+def _apply_size_guard(
+    zip_path: Path,
+    members: dict[str, Path],
+    limit: int,
+    keep_all: bool,
+) -> list[str]:
+    """Offer to shrink an over-limit archive; returns the members left out.
+
+    Course archives get emailed, so an archive over the mail limit is a problem
+    even though it was built correctly. Datasets left in a course directory are
+    the usual cause and are nearly always obtainable elsewhere, so the fix is to
+    offer them up rather than refuse or silently prune. *members* is mutated to
+    match whatever is dropped; the caller rewrites the zip from it.
+    """
+    total = zip_path.stat().st_size
+    if total <= limit:
+        return []
+
+    print(f"Archive is {_format_size(total)}, over the {_format_size(limit)} limit.")
+    if keep_all:
+        print("  --keep-all given; including every file.")
+        return []
+    if not sys.stdin.isatty():
+        print("  Not running interactively; including every file.")
+        print("  Re-run in a terminal to choose what to leave out.")
+        return []
+
+    candidates = _size_candidates(_member_contributions(zip_path), limit)
+    if not candidates:
+        print("  No single file is large enough to help; including every file.")
+        return []
+
+    print("  The biggest files are listed first. Leaving one out is enough if")
+    print("  it brings the archive under the limit.")
+    dropped = _choose_drops(candidates, total, limit, _ask_to_drop)
+    if not dropped:
+        print("  Including every file; the archive is still over the limit.")
+        return []
+
+    for name in dropped:
+        del members[name]
+    return dropped
+
+
 def archive_course(
     dirname: str,
     output: str | None = None,
     export_html: bool = True,
     export_pdf: bool = True,
+    max_size: float = 10.0,
+    keep_all: bool = False,
 ) -> Path:
     """Create a zip archive of a course directory.
 
     Optionally exports notebooks to HTML and/or PDF first.
+
+    *max_size* is the size in MB above which the archive is too big to email
+    comfortably; exceeding it prompts to leave the largest files out. Pass 0 to
+    skip that check, or *keep_all* to report an oversized archive without being
+    asked anything.
     """
     course_path = Path(dirname)
     if not course_path.is_dir():
@@ -182,29 +368,24 @@ def archive_course(
     else:
         zip_path = Path(f"{course_path.name}.zip")
 
-    # Directories to exclude from the zip
-    exclude_dirs = {".git", ".venv", "__pycache__", ".ipynb_checkpoints"}
-
     # Create zip file
-    parent = course_path.parent
-    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
-        for file_path in sorted(course_path.rglob("*")):
-            if file_path.is_file() and not (
-                set(file_path.relative_to(course_path).parts) & exclude_dirs
-            ):
-                arcname = file_path.relative_to(parent)
-                zf.write(file_path, arcname)
+    members = _archive_members(course_path)
+    _write_zip(zip_path, members)
+
+    # The archive has to be small enough to email; offer to shed the big files
+    # if it isn't. Measuring the finished zip is what makes the offer honest.
+    dropped: list[str] = []
+    limit = _megabytes_to_bytes(max_size)
+    if limit > 0:
+        dropped = _apply_size_guard(zip_path, members, limit, keep_all)
+        if dropped:
+            _write_zip(zip_path, members)
 
     # Gather info for summary
     with zipfile.ZipFile(zip_path, "r") as zf:
         file_count = len(zf.namelist())
 
-    zip_size = zip_path.stat().st_size
-    size_str = (
-        f"{zip_size / 1024:.1f} KB"
-        if zip_size < 1024 * 1024
-        else f"{zip_size / (1024 * 1024):.1f} MB"
-    )
+    size_str = _format_size(zip_path.stat().st_size)
 
     # Collect non-notebook, non-HTML, non-PDF files for the summary
     notebook_names = {nb.name for nb in notebooks}
@@ -243,6 +424,13 @@ def archive_course(
     if other_files:
         print("Other files:")
         for name in other_files:
+            print(f"  {name}")
+
+    # Record the omissions in the summary: whoever receives this archive should
+    # be told what is missing, and the full member name says where it belonged.
+    if dropped:
+        print("Left out (too big to email):")
+        for name in dropped:
             print(f"  {name}")
 
     return zip_path
@@ -284,6 +472,22 @@ def main() -> None:
         default=False,
         help="Skip PDF export of notebooks",
     )
+    parser.add_argument(
+        "--max-size",
+        type=float,
+        default=10.0,
+        metavar="MB",
+        help=(
+            "Prompt to leave out the largest files if the archive exceeds this "
+            "many MB (default: 10, enough to email; 0 disables the check)"
+        ),
+    )
+    parser.add_argument(
+        "--keep-all",
+        action="store_true",
+        default=False,
+        help="Include every file without prompting, even if the archive is oversized",
+    )
     args = parser.parse_args()
 
     archive_course(
@@ -291,6 +495,8 @@ def main() -> None:
         output=args.output,
         export_html=not args.no_html,
         export_pdf=not args.no_pdf,
+        max_size=args.max_size,
+        keep_all=args.keep_all,
     )
 
 
