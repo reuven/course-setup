@@ -215,6 +215,23 @@ def _choose_drops(
     return dropped
 
 
+def _ask_to_drop(name: str, size: int, projected: int) -> bool:
+    """Ask on the terminal whether to leave *name* out of the archive.
+
+    Quoting the projected archive size makes the consequence of each answer
+    visible. Keeping the file is the default for anything but an explicit yes,
+    including a closed stdin -- a surprise omission from a course archive is
+    worse than an archive that turns out to be too big to mail.
+    """
+    print(f"  {name} — {_format_size(size)}")
+    print(f"    Archive would be {_format_size(projected)} without it.")
+    try:
+        answer = input("    Leave it out? [y/N] ")
+    except EOFError:
+        return False
+    return answer.strip().lower() in {"y", "yes"}
+
+
 def archive_course(
     dirname: str,
     output: str | None = None,

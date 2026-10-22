@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from setup_course_github.archive_course import (
+    _ask_to_drop,
     _choose_drops,
     _format_size,
     _member_contributions,
@@ -1229,3 +1230,55 @@ def test_choose_drops_reports_the_projected_size_after_each_drop() -> None:
         ("a.csv", 2_000_000, 11_000_000),
         ("b.csv", 1_000_000, 12_000_000),
     ]
+
+
+# ---------------------------------------------------------------------------
+# size guard: the interactive question
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("answer", ["y", "Y", "yes", " y "])
+def test_ask_to_drop_accepts_yes(
+    answer: str, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """An explicit yes drops the file."""
+    monkeypatch.setattr("builtins.input", lambda _: answer)
+
+    assert _ask_to_drop("c/data/big.csv", 8 * 1024 * 1024, 4 * 1024 * 1024) is True
+
+
+@pytest.mark.parametrize("answer", ["", "n", "no", "maybe", "q"])
+def test_ask_to_drop_keeps_on_anything_else(
+    answer: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Keeping the file is the default: only an explicit yes drops it."""
+    monkeypatch.setattr("builtins.input", lambda _: answer)
+
+    assert _ask_to_drop("c/data/big.csv", 8 * 1024 * 1024, 4 * 1024 * 1024) is False
+
+
+def test_ask_to_drop_shows_size_and_projected_total(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The question names the file, its weight, and the resulting archive size."""
+    monkeypatch.setattr("builtins.input", lambda _: "n")
+
+    _ask_to_drop("c/data/big.csv", 8 * 1024 * 1024, 4 * 1024 * 1024)
+
+    out = capsys.readouterr().out
+    assert "c/data/big.csv" in out
+    assert "8.0 MB" in out
+    assert "4.0 MB" in out
+
+
+def test_ask_to_drop_keeps_file_when_stdin_closes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A closed stdin must not crash the archive; the file is kept."""
+
+    def closed(_: str) -> str:
+        raise EOFError
+
+    monkeypatch.setattr("builtins.input", closed)
+
+    assert _ask_to_drop("c/data/big.csv", 8 * 1024 * 1024, 4 * 1024 * 1024) is False
