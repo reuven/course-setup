@@ -5,7 +5,11 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from setup_course_github.archive_course import archive_course, main
+from setup_course_github.archive_course import (
+    _member_contributions,
+    archive_course,
+    main,
+)
 
 # ---------------------------------------------------------------------------
 # archive_course function tests
@@ -1010,3 +1014,35 @@ def test_pdf_failure_kind_other_and_priority() -> None:
         _pdf_failure_kind("No module named 'playwright'; try playwright install")
         == "lib"
     )
+
+
+# ---------------------------------------------------------------------------
+# size guard: measuring each member's contribution
+# ---------------------------------------------------------------------------
+
+
+def test_member_contributions_reports_compressed_sizes(tmp_path: Path) -> None:
+    """Each member maps to its compressed size as stored in the zip."""
+    zip_path = tmp_path / "a.zip"
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("c/small.txt", "x")
+        zf.writestr("c/big.csv", "a,b,c\n" * 20000)
+
+    contributions = _member_contributions(zip_path)
+
+    assert set(contributions) == {"c/small.txt", "c/big.csv"}
+    with zipfile.ZipFile(zip_path) as zf:
+        for info in zf.infolist():
+            assert contributions[info.filename] == info.compress_size
+
+
+def test_member_contributions_measures_compressed_not_raw(tmp_path: Path) -> None:
+    """A highly compressible member contributes far less than its raw size."""
+    raw = "a,b,c\n" * 50000
+    zip_path = tmp_path / "a.zip"
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("c/big.csv", raw)
+
+    contributions = _member_contributions(zip_path)
+
+    assert contributions["c/big.csv"] < len(raw) / 10

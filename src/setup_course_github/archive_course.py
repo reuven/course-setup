@@ -141,6 +141,19 @@ def _export_notebooks_to_pdf(notebooks: list[Path], course_path: Path) -> int:
     return exported
 
 
+def _member_contributions(zip_path: Path) -> dict[str, int]:
+    """Map each member of *zip_path* to the bytes it contributes to the archive.
+
+    ZIP deflates every member independently -- there is no solid or cross-file
+    compression -- so a member's stored compressed size *is* what it costs in
+    the finished file. That makes "how much would dropping this save?" an exact
+    question rather than an estimate, which is why the size guard measures the
+    built archive instead of guessing from raw file sizes.
+    """
+    with zipfile.ZipFile(zip_path) as zf:
+        return {info.filename: info.compress_size for info in zf.infolist()}
+
+
 def archive_course(
     dirname: str,
     output: str | None = None,
