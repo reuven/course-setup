@@ -19,3 +19,10 @@ build/
 .vscode/
 *.swp
 *.swo
+
+# Editor and OS cruft
+# The leading # is escaped: an unescaped one would start a comment.
+\#*#
+.#*
+*~
+.DS_Store

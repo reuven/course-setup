@@ -2,6 +2,8 @@
 
 import datetime
 import os
+import shutil
+import subprocess
 import sys
 from collections.abc import Generator
 from pathlib import Path
@@ -2693,6 +2695,52 @@ def test_gitignore_present_in_course_directory(
     assert gitignore.exists(), ".gitignore should be present in the course directory"
     contents = gitignore.read_text()
     assert "__pycache__/" in contents
+
+
+def test_template_gitignore_covers_editor_and_os_cruft() -> None:
+    """The shipped template ignores the files editors and Finder leave behind.
+
+    Course repos are created for students and handed back with their work in
+    them, so the template is the only chance to keep Finder and editor droppings
+    out of a repo nobody will think to clean up.
+    """
+    contents = (_get_template_dir() / ".gitignore").read_text()
+    for pattern in ("\\#*#", ".#*", "*~", ".DS_Store"):
+        assert pattern in contents, f"{pattern} missing from the template"
+
+
+def test_template_gitignore_patterns_are_honored_by_git(tmp_path: Path) -> None:
+    """Git actually ignores the cruft, not just a pattern that looks right.
+
+    A leading `#` opens a comment in .gitignore, so the Emacs auto-save pattern
+    is silently inert unless escaped. Checking the text catches a typo; only
+    asking git catches a pattern it quietly discards.
+    """
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    # Point git at config files that do not exist, so a developer's own global
+    # excludesFile cannot mask a template that is missing a pattern.
+    env = {
+        **os.environ,
+        "GIT_CONFIG_GLOBAL": str(tmp_path / "absent-global"),
+        "GIT_CONFIG_SYSTEM": str(tmp_path / "absent-system"),
+    }
+    subprocess.run(["git", "init", "-q"], cwd=repo, env=env, check=True)
+    shutil.copy(_get_template_dir() / ".gitignore", repo / ".gitignore")
+
+    cruft = ["#lesson.py#", ".#lesson.py", "lesson.py~", ".DS_Store", "notes.swp"]
+    for name in cruft:
+        (repo / name).touch()
+
+    unignored = [
+        name
+        for name in cruft
+        if subprocess.run(
+            ["git", "check-ignore", "-q", name], cwd=repo, env=env
+        ).returncode
+        != 0
+    ]
+    assert unignored == [], f"git would still commit: {unignored}"
 
 
 # ---------------------------------------------------------------------------
