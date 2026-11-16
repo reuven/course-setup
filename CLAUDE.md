@@ -93,7 +93,7 @@ These conflicts are deliberate. Resolve them this way:
 - Before building and publishing, delete all old versions in `dist/`. The Git tags mean
   nothing is lost.
 - Set up `.gitignore` before the first commit. Always include editor and OS cruft:
-  `#*#`, `.#*`, `*~`, `*.swp`, `.DS_Store`.
+  `\#*#`, `.#*`, `*~`, `*.swp`, `.DS_Store`.
 - Ask before any destructive Git operation: force-push, hard reset, history rewrite, or
   branch deletion.
 
